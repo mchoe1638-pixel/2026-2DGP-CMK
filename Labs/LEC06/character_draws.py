@@ -75,5 +75,8 @@ def move_triangle():
 
 while running:
     move_circle()
+    delay(0.3)
     move_rectangle()
+    delay(0.3)
     move_triangle()
+    delay(0.3)
