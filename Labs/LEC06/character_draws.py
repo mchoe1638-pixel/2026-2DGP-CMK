@@ -43,13 +43,14 @@ def move_rectangle():
         
 def move_triangle():
     CENTER_X = w // 2
+    slope = (TOP - BOTTOM) / (RIGHT - CENTER_X)
     for x in range(CENTER_X, RIGHT+1, SPEED):
         draw_frame(x, BOTTOM)
     for x in range(RIGHT, CENTER_X-1, -SPEED):
-        y = 100 + (RIGHT - x) * (450 / 350)
+        y = 100 + (RIGHT - x) * slope
         draw_frame(x, y)
     for x in range(CENTER_X, LEFT-1, -SPEED):
-        y = TOP - (CENTER_X - x) * (450 / 350)
+        y = TOP - (CENTER_X - x) * slope
         draw_frame(x,y)
     for x in range(LEFT, CENTER_X+1, SPEED):
         draw_frame(x,BOTTOM)
