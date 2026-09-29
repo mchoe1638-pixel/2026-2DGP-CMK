@@ -29,7 +29,8 @@ def move_circle():
         draw_frame(x,y)
 
 def move_rectangle():
-    for x in range(400, RIGHT+1, SPEED):
+    CENTER_X = w // 2
+    for x in range(CENTER_X, RIGHT+1, SPEED):
         draw_frame(x, BOTTOM)
     for y in range(BOTTOM, TOP+1, SPEED):
         draw_frame(RIGHT, y)
@@ -37,7 +38,7 @@ def move_rectangle():
         draw_frame(x, TOP)
     for y in range(TOP, BOTTOM-1, -SPEED):
         draw_frame(LEFT, y)
-    for x in range(LEFT, 400+1, SPEED):
+    for x in range(LEFT, CENTER_X+1, SPEED):
         draw_frame(x,BOTTOM)
         
 def move_triangle():
