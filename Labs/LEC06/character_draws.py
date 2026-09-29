@@ -1,4 +1,5 @@
 from pico2d import *
+import math
 
 w = 800
 h = 600
