@@ -59,7 +59,7 @@ def move_triangle():
         y = 100 + (750 - x) * (450 / 350)
         draw_frame(x, y)
     for x in range(400, 50, -1):
-        y = 550 - (400-x)
+        y = 550 - (400 - x) * (450 / 350)
         draw_frame(x,y)
     for x in range(50, 400, 1):
             draw_frame(x,100)
