@@ -1,7 +1,7 @@
 from pico2d import *
 import math
 SPEED = 3
-
+LEFT, RIGHT, TOP, BOTTOM = 50, 750, 550, 100
 w = 800
 h = 600
 open_canvas(w, h)
@@ -29,16 +29,16 @@ def move_circle():
         draw_frame(x,y)
 
 def move_rectangle():
-    for x in range(400, 750+1, SPEED):
-        draw_frame(x, 100)
-    for y in range(100, 550+1, SPEED):
-        draw_frame(750, y)
-    for x in range(750, 50-1, -SPEED):
-        draw_frame(x, 550)
-    for y in range(550, 100-1, -SPEED):
-        draw_frame(50, y)
-    for x in range(50, 400+1, SPEED):
-        draw_frame(x,100)
+    for x in range(400, RIGHT+1, SPEED):
+        draw_frame(x, BOTTOM)
+    for y in range(BOTTOM, TOP+1, SPEED):
+        draw_frame(RIGHT, y)
+    for x in range(RIGHT, LEFT-1, -SPEED):
+        draw_frame(x, TOP)
+    for y in range(TOP, BOTTOM-1, -SPEED):
+        draw_frame(LEFT, y)
+    for x in range(LEFT, 400+1, SPEED):
+        draw_frame(x,BOTTOM)
         
 def move_triangle():
     for x in range(400, 750+1, SPEED):
