@@ -52,6 +52,8 @@ def move_triangle():
     grass.draw(w//2, h//8)
     character.draw(w//2, h//5)
     update_canvas()
+    for x in range(400, 750, 1):
+        draw_frame(x, 100)
 
 while True:
     move_circle()
