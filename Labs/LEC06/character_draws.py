@@ -15,6 +15,7 @@ def draw_frame(x,y):
     grass.draw(w//2, h//8)
     character.draw(x,y)
     update_canvas()
+    delay(0.01)
 
 def move_circle():
     CENTER_X = 400
@@ -29,7 +30,6 @@ def move_circle():
         y = CENTER_Y+RADIAN*math.sin(math.radians(ANGLE))        
         draw_frame(x,y)
         ANGLE+=2
-        delay(0.01)
 
 def move_rectangle():
     print('rectangle')
