@@ -51,9 +51,8 @@ def move_triangle():
         y = 550 - (400 - x) * (450 / 350)
         draw_frame(x,y)
     for x in range(50, 400+1, SPEED):
-            draw_frame(x,100)
+        draw_frame(x,100)
 while True:
     move_circle()
     move_rectangle()
     move_triangle()
-    pass
