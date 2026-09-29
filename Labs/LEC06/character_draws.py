@@ -36,7 +36,16 @@ def move_rectangle():
     grass.draw(w//2, h//8)
     character.draw(w//2, h//5)
     update_canvas()
-    flag = 0
+    for x in range(400, 750, 5):
+        draw_frame(x, 100)
+    for y in range(100, 550, 5):
+        draw_frame(750, y)
+    for x in range(750, 50, 5):
+        draw_frame(x, 550)
+    for y in range(550, 100, -5):
+        draw_frame(50, y)
+    for x in range(50, 400, 5):
+        draw_frame(x,100)
         
 def move_triangle():
     print('triangle')
