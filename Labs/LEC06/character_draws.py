@@ -40,7 +40,7 @@ def move_rectangle():
         draw_frame(x, 100)
     for y in range(100, 550, 1):
         draw_frame(750, y)
-    for x in range(750, 50, 1):
+    for x in range(750, 50, -1):
         draw_frame(x, 550)
     for y in range(550, 100, -1):
         draw_frame(50, y)
