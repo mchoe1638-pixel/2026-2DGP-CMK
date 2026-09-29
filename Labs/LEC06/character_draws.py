@@ -23,9 +23,6 @@ def move_circle():
     CENTER_Y = 300
     RADIAN = 200
     ANGLE = 270
-
-    character.draw(w//2, h//5)
-    update_canvas()
     while ANGLE <= 270 + 360:
         x = CENTER_X+RADIAN*math.cos(math.radians(ANGLE))
         y = CENTER_Y+RADIAN*math.sin(math.radians(ANGLE))        
@@ -34,9 +31,6 @@ def move_circle():
 
 def move_rectangle():
     print('rectangle')
-    grass.draw(w//2, h//8)
-    character.draw(w//2, h//5)
-    update_canvas()
     for x in range(400, 750+1, SPEED):
         draw_frame(x, 100)
     for y in range(100, 550+1, SPEED):
@@ -50,9 +44,6 @@ def move_rectangle():
         
 def move_triangle():
     print('triangle')
-    grass.draw(w//2, h//8)
-    character.draw(w//2, h//5)
-    update_canvas()
     for x in range(400, 750+1, SPEED):
         draw_frame(x, 100)
     for x in range(750, 400-1, -SPEED):
