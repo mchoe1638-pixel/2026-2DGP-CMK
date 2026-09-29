@@ -24,7 +24,7 @@ def move_circle():
     
     character.draw(w//2, h//5)
     update_canvas()
-    while ANGLE < 360:
+    while ANGLE <= 360:
         x = CENTER_X+RADIAN*math.cos(math.radians(ANGLE))
         y = CENTER_Y+RADIAN*math.sin(math.radians(ANGLE))        
         draw_frame(x,y)
