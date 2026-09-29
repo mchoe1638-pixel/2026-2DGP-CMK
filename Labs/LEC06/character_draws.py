@@ -8,7 +8,15 @@ open_canvas(w, h)
 grass = load_image('grass.png')
 character = load_image('character.png')
 
+running = True
 
+def handle_events():
+    global running
+    for event in get_events():
+        if event.type == SDL_QUIT:
+            running = False
+        elif event.type == SDL_KEYDOWN and event.key == SDLK_ESCAPE:
+            running = False
 
 def draw_frame(x,y):
     get_events()
