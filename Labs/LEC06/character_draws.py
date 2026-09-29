@@ -20,17 +20,16 @@ def move_circle():
     CENTER_X = 400
     CENTER_Y = 300
     RADIAN = 200
-    ANGLE = 0
-    
+    ANGLE = 270
+
     character.draw(w//2, h//5)
     update_canvas()
-    while ANGLE <= 360:
+    while ANGLE <= 270 + 360:
         x = CENTER_X+RADIAN*math.cos(math.radians(ANGLE))
         y = CENTER_Y+RADIAN*math.sin(math.radians(ANGLE))        
         draw_frame(x,y)
         ANGLE+=2
         delay(0.01)
-    ANGLE = 0
 
 def move_rectangle():
     print('rectangle')
