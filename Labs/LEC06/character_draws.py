@@ -54,7 +54,9 @@ def move_triangle():
     update_canvas()
     for x in range(400, 750, 1):
         draw_frame(x, 100)
-
+    for x in range(750, 400, -1):
+        y = 200+(750 - x)
+        draw_frame(x, y)
 while True:
     move_circle()
     move_rectangle()
