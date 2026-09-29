@@ -30,7 +30,6 @@ def move_circle():
         ANGLE+=2
 
 def move_rectangle():
-    print('rectangle')
     for x in range(400, 750+1, SPEED):
         draw_frame(x, 100)
     for y in range(100, 550+1, SPEED):
@@ -43,7 +42,6 @@ def move_rectangle():
         draw_frame(x,100)
         
 def move_triangle():
-    print('triangle')
     for x in range(400, 750+1, SPEED):
         draw_frame(x, 100)
     for x in range(750, 400-1, -SPEED):
