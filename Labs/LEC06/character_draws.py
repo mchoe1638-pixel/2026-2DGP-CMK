@@ -21,13 +21,13 @@ def draw_frame(x,y):
 def move_circle():
     CENTER_X = 400
     CENTER_Y = 300
-    RADIAN = 200
-    ANGLE = 270
-    while ANGLE <= 270 + 360:
-        x = CENTER_X+RADIAN*math.cos(math.radians(ANGLE))
-        y = CENTER_Y+RADIAN*math.sin(math.radians(ANGLE))        
+    RADIUS = 200
+    angle = 270
+    while angle <= 270 + 360:
+        x = CENTER_X+RADIUS*math.cos(math.radians(angle))
+        y = CENTER_Y+RADIUS*math.sin(math.radians(angle))        
         draw_frame(x,y)
-        ANGLE+=2
+        angle+=2
 
 def move_rectangle():
     for x in range(400, 750+1, SPEED):
