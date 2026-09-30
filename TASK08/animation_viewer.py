@@ -2,7 +2,11 @@
 # 캐릭터 스프라이트 시트에서 애니메이션을 읽어와 화면 중앙에서 재생한다.
 from pico2d import *
 
-open_canvas(800, 600)
+SCREEN_W, SCREEN_H = 800, 600
+CENTER_X = SCREEN_W // 2
+CENTER_Y = SCREEN_H // 2
+
+open_canvas(SCREEN_W, SCREEN_H)
 
 # 스프라이트 시트(character_sheet.png, 482x470)를 PIL로 분석해서 얻은 프레임 좌표.
 # (left, bottom, width, height) : pico2d 이미지 좌표계(원점이 왼쪽 아래)를 기준으로 한다.
@@ -41,10 +45,16 @@ SCALE = 4  # 캐릭터를 화면 높이 절반 이상으로 키우기 위한 확
 
 
 def draw_character(anim_name, frame_index):
-    # 지정한 애니메이션의 frame_index번째 프레임을 SCALE배로 키워서 그린다.
+    # 지정한 애니메이션의 frame_index번째 프레임을 화면 중앙에 그린다.
+    # clip_draw_to_origin은 (x, y)가 그릴 사각형의 왼쪽 아래 기준이라
+    # 중앙에 두려면 그릴 크기의 절반만큼 x, y를 보정해야 한다.
     left, bottom, width, height = FRAMES[anim_name][frame_index]
     draw_w, draw_h = width * SCALE, height * SCALE
-    character.clip_draw_to_origin(left, bottom, width, height, 400, 300, draw_w, draw_h)
+    character.clip_draw_to_origin(
+        left, bottom, width, height,
+        CENTER_X - draw_w // 2, CENTER_Y - draw_h // 2,
+        draw_w, draw_h
+    )
 
 
 frame_index = 0
