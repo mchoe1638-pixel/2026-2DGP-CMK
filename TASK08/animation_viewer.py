@@ -37,10 +37,19 @@ FRAMES = {
 
 character = load_image('character_sheet.png')
 
-clear_canvas()
-left, bottom, width, height = FRAMES['idle'][0]
-character.clip_draw_to_origin(left, bottom, width, height, 400, 300)
-update_canvas()
-delay(1)
+
+def draw_character(anim_name, frame_index):
+    # 지정한 애니메이션의 frame_index번째 프레임을 화면에 그린다.
+    left, bottom, width, height = FRAMES[anim_name][frame_index]
+    character.clip_draw_to_origin(left, bottom, width, height, 400, 300)
+
+
+frame_index = 0
+while True:
+    clear_canvas()
+    draw_character('idle', frame_index)
+    update_canvas()
+    delay(0.1)
+    frame_index = (frame_index + 1) % len(FRAMES['idle'])
 
 close_canvas()
