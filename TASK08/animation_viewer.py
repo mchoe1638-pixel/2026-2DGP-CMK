@@ -57,12 +57,17 @@ def draw_character(anim_name, frame_index):
     )
 
 
-frame_index = 0
-while True:
+# idle -> walk 순서로 한 번씩 재생해본다. (반복/정지/무한 재생은 다음 단계에서 추가)
+for i in range(len(FRAMES['idle'])):
     clear_canvas()
-    draw_character('idle', frame_index)
+    draw_character('idle', i)
     update_canvas()
     delay(0.1)
-    frame_index = (frame_index + 1) % len(FRAMES['idle'])
+
+for i in range(len(FRAMES['walk'])):
+    clear_canvas()
+    draw_character('walk', i)
+    update_canvas()
+    delay(0.1)
 
 close_canvas()
