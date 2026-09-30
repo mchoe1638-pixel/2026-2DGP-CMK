@@ -47,6 +47,9 @@ PAUSE_TIME = 1.0   # 애니메이션 사이 정지 시간(초)
 PAUSE_STEP = 0.05  # 정지 중 이벤트를 확인하는 간격(초)
 FRAME_TIME = 0.1   # 프레임 하나가 유지되는 시간(초)
 
+# 재생 순서. 이 리스트만 바꾸면 애니메이션 순서나 개수를 바꿀 수 있다.
+ANIMATION_ORDER = ['idle', 'walk', 'attack', 'jump']
+
 # [가산점A] 프레임마다 높이가 달라도(90~120px) 발 위치가 흔들리지 않도록,
 # 시트에서 가장 높은 프레임을 기준으로 화면 세로 중앙에 오는 발 위치를 미리 계산해 둔다.
 max_frame_height = max(h for frames in FRAMES.values() for (_, _, _, h) in frames)
@@ -87,7 +90,7 @@ def wait_seconds(seconds):
 
 def play_animation(anim_name):
     # anim_name 애니메이션을 REPEAT_COUNT번 반복 재생한 뒤 PAUSE_TIME만큼 정지한다.
-    # 프레임 개수는 FRAMES[anim_name]의 길이를 그대로 쓰므로 애니메이션마다 달라도 된다.
+    # [가산점B] 프레임 개수는 FRAMES[anim_name]의 길이를 그대로 쓰므로 애니메이션마다 달라도 된다.
     frames = FRAMES[anim_name]
     for _ in range(REPEAT_COUNT):
         if not running:
@@ -104,9 +107,10 @@ def play_animation(anim_name):
 
 
 while running:
-    play_animation('idle')
-    play_animation('walk')
-    play_animation('attack')
-    play_animation('jump')
+    # [가산점B] ANIMATION_ORDER 데이터만 바꾸면 재생 순서/개수를 바꿀 수 있는 일반화된 루프.
+    for anim_name in ANIMATION_ORDER:
+        play_animation(anim_name)
+        if not running:
+            break
 
 close_canvas()
