@@ -1,14 +1,17 @@
 # Drill #8: 애니메이션 뷰어
-# 캐릭터 스프라이트 시트에서 애니메이션을 읽어와 화면 중앙에서 재생한다.
+# 캐릭터 스프라이트 시트에서 idle, walk, attack, jump 네 가지 애니메이션을 읽어와
+# 화면 중앙에서 순서대로 무한 반복 재생한다.
 from pico2d import *
 
+# 화면/배치 설정
 SCREEN_W, SCREEN_H = 800, 600
 CENTER_X = SCREEN_W // 2
 CENTER_Y = SCREEN_H // 2
 
 open_canvas(SCREEN_W, SCREEN_H)
 
-# 스프라이트 시트(character_sheet.png, 482x470)를 PIL로 분석해서 얻은 프레임 좌표.
+# 애니메이션 프레임 데이터
+# character_sheet.png(482x470)를 PIL로 분석해서 얻은 프레임 좌표.
 # (left, bottom, width, height) : pico2d 이미지 좌표계(원점이 왼쪽 아래)를 기준으로 한다.
 FRAMES = {
     'idle': [
@@ -39,33 +42,22 @@ FRAMES = {
     ],
 }
 
-character = load_image('character_sheet.png')
-
-SCALE = 4          # 캐릭터를 화면 높이 절반 이상으로 키우기 위한 확대 배율
-REPEAT_COUNT = 5   # 애니메이션 하나를 반복할 횟수
-PAUSE_TIME = 1.0   # 애니메이션 사이 정지 시간(초)
-PAUSE_STEP = 0.05  # 정지 중 이벤트를 확인하는 간격(초)
-FRAME_TIME = 0.1   # 프레임 하나가 유지되는 시간(초)
-
 # 재생 순서. 이 리스트만 바꾸면 애니메이션 순서나 개수를 바꿀 수 있다.
 ANIMATION_ORDER = ['idle', 'walk', 'attack', 'jump']
 
-# [가산점A] 프레임마다 높이가 달라도(90~120px) 발 위치가 흔들리지 않도록,
+# 재생 타이밍 설정
+SCALE = 4          # 가장 작은 프레임(90px)도 화면 높이 절반(300px)을 넘도록 하는 확대 배율
+REPEAT_COUNT = 5   # 애니메이션 하나를 반복할 횟수
+FRAME_TIME = 0.1   # 프레임 하나가 유지되는 시간(초)
+PAUSE_TIME = 1.0   # 애니메이션 사이 정지 시간(초)
+PAUSE_STEP = 0.05  # 정지 중 이벤트를 확인하는 간격(초)
+
+# 프레임마다 높이가 달라도(90~120px) 발 위치가 흔들리지 않도록,
 # 시트에서 가장 높은 프레임을 기준으로 화면 세로 중앙에 오는 발 위치를 미리 계산해 둔다.
 max_frame_height = max(h for frames in FRAMES.values() for (_, _, _, h) in frames)
 FOOT_Y = CENTER_Y - (max_frame_height * SCALE) // 2
 
-
-def draw_character(anim_name, frame_index):
-    # anim_name의 frame_index번째 프레임을 화면 중앙, 고정된 발 위치(FOOT_Y)에 그린다.
-    left, bottom, width, height = FRAMES[anim_name][frame_index]
-    draw_w, draw_h = width * SCALE, height * SCALE
-    character.clip_draw_to_origin(
-        left, bottom, width, height,
-        CENTER_X - draw_w // 2, FOOT_Y,
-        draw_w, draw_h
-    )
-
+character = load_image('character_sheet.png')
 
 running = True
 
@@ -78,6 +70,15 @@ def handle_events():
         elif event.type == SDL_KEYDOWN and event.key == SDLK_ESCAPE:
             running = False
 
+def draw_character(anim_name, frame_index):
+    # anim_name의 frame_index번째 프레임을 화면 중앙, 고정된 발 위치(FOOT_Y)에 그린다.
+    left, bottom, width, height = FRAMES[anim_name][frame_index]
+    draw_w, draw_h = width * SCALE, height * SCALE
+    character.clip_draw_to_origin(
+        left, bottom, width, height,
+        CENTER_X - draw_w // 2, FOOT_Y,
+        draw_w, draw_h
+    )
 
 def wait_seconds(seconds):
     # delay(seconds)로 한 번에 멈추지 않고 짧은 간격(PAUSE_STEP)으로 나눠 기다린다.
@@ -87,10 +88,9 @@ def wait_seconds(seconds):
         delay(PAUSE_STEP)
         elapsed += PAUSE_STEP
 
-
 def play_animation(anim_name):
     # anim_name 애니메이션을 REPEAT_COUNT번 반복 재생한 뒤 PAUSE_TIME만큼 정지한다.
-    # [가산점B] 프레임 개수는 FRAMES[anim_name]의 길이를 그대로 쓰므로 애니메이션마다 달라도 된다.
+    # 프레임 개수는 FRAMES[anim_name]의 길이를 그대로 쓰므로 애니메이션마다 달라도 된다.
     frames = FRAMES[anim_name]
     for _ in range(REPEAT_COUNT):
         if not running:
@@ -105,9 +105,7 @@ def play_animation(anim_name):
             delay(FRAME_TIME)
     wait_seconds(PAUSE_TIME)
 
-
 while running:
-    # [가산점B] ANIMATION_ORDER 데이터만 바꾸면 재생 순서/개수를 바꿀 수 있는 일반화된 루프.
     for anim_name in ANIMATION_ORDER:
         play_animation(anim_name)
         if not running:
