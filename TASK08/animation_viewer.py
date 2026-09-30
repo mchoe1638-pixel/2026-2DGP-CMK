@@ -46,14 +46,21 @@ REPEAT_COUNT = 5   # 애니메이션 하나를 반복할 횟수
 PAUSE_TIME = 1.0   # 애니메이션 사이 정지 시간(초)
 PAUSE_STEP = 0.05  # 정지 중 이벤트를 확인하는 간격(초)
 
+# [가산점A] 프레임마다 높이가 달라도(90~120px) 발 위치가 흔들리지 않도록,
+# 시트에서 가장 높은 프레임을 기준으로 화면 세로 중앙에 오는 발 위치를 미리 계산해 둔다.
+max_frame_height = max(h for frames in FRAMES.values() for (_, _, _, h) in frames)
+FOOT_Y = CENTER_Y - (max_frame_height * SCALE) // 2
+
 
 def draw_character(anim_name, frame_index):
-    # 지정한 애니메이션의 frame_index번째 프레임을 화면 중앙에 그린다.
+    # anim_name의 frame_index번째 프레임을 화면 중앙, 고정된 발 위치(FOOT_Y)에 그린다.
+    # clip_draw_to_origin의 (x, y)는 그릴 사각형의 왼쪽 아래 기준이라서,
+    # y는 프레임 크기와 상관없이 항상 FOOT_Y를 그대로 사용해 발 높이를 고정한다.
     left, bottom, width, height = FRAMES[anim_name][frame_index]
     draw_w, draw_h = width * SCALE, height * SCALE
     character.clip_draw_to_origin(
         left, bottom, width, height,
-        CENTER_X - draw_w // 2, CENTER_Y - draw_h // 2,
+        CENTER_X - draw_w // 2, FOOT_Y,
         draw_w, draw_h
     )
 
@@ -72,7 +79,6 @@ def handle_events():
 
 def wait_seconds(seconds):
     # delay(seconds)로 한 번에 멈추지 않고 짧은 간격(PAUSE_STEP)으로 나눠 기다린다.
-    # 그 사이에도 이벤트를 계속 처리해서 '응답 없음' 상태가 되지 않고 ESC/닫기 요청도 즉시 반영한다.
     elapsed = 0.0
     while elapsed < seconds and running:
         handle_events()
@@ -80,7 +86,6 @@ def wait_seconds(seconds):
         elapsed += PAUSE_STEP
 
 
-# idle -> walk -> attack -> jump 를 무한히 순환 재생하되, 종료 요청이 오면 즉시 멈춘다.
 while running:
     for _ in range(REPEAT_COUNT):
         if not running:
