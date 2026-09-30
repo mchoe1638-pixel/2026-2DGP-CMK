@@ -42,7 +42,9 @@ FRAMES = {
 character = load_image('character_sheet.png')
 
 SCALE = 4  # 캐릭터를 화면 높이 절반 이상으로 키우기 위한 확대 배율
-REPEAT_COUNT = 5  # 애니메이션 하나를 반복할 횟수
+REPEAT_COUNT = 5   # 애니메이션 하나를 반복할 횟수
+PAUSE_TIME = 1.0   # 애니메이션 사이 정지 시간(초)
+PAUSE_STEP = 0.05  # 정지 중 이벤트를 확인하는 간격(초)
 
 
 def draw_character(anim_name, frame_index):
@@ -58,13 +60,24 @@ def draw_character(anim_name, frame_index):
     )
 
 
-# idle -> walk -> attack -> jump 순서로, 각각 REPEAT_COUNT번씩 반복 재생한다.
+def wait_seconds(seconds):
+    # delay(seconds)로 한 번에 멈추지 않고 짧은 간격(PAUSE_STEP)으로 나눠 기다린다.
+    # 그 사이에도 get_events()를 호출해서 Windows에서 창이 '응답 없음' 상태가 되지 않게 한다.
+    elapsed = 0.0
+    while elapsed < seconds:
+        get_events()
+        delay(PAUSE_STEP)
+        elapsed += PAUSE_STEP
+
+
+# idle -> walk -> attack -> jump 순서로, 각각 REPEAT_COUNT번 반복 후 PAUSE_TIME만큼 정지한다.
 for _ in range(REPEAT_COUNT):
     for i in range(len(FRAMES['idle'])):
         clear_canvas()
         draw_character('idle', i)
         update_canvas()
         delay(0.1)
+wait_seconds(PAUSE_TIME)
 
 for _ in range(REPEAT_COUNT):
     for i in range(len(FRAMES['walk'])):
@@ -72,6 +85,7 @@ for _ in range(REPEAT_COUNT):
         draw_character('walk', i)
         update_canvas()
         delay(0.1)
+wait_seconds(PAUSE_TIME)
 
 for _ in range(REPEAT_COUNT):
     for i in range(len(FRAMES['attack'])):
@@ -79,6 +93,7 @@ for _ in range(REPEAT_COUNT):
         draw_character('attack', i)
         update_canvas()
         delay(0.1)
+wait_seconds(PAUSE_TIME)
 
 for _ in range(REPEAT_COUNT):
     for i in range(len(FRAMES['jump'])):
@@ -86,5 +101,6 @@ for _ in range(REPEAT_COUNT):
         draw_character('jump', i)
         update_canvas()
         delay(0.1)
+wait_seconds(PAUSE_TIME)
 
 close_canvas()
