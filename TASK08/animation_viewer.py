@@ -57,7 +57,7 @@ def draw_character(anim_name, frame_index):
     )
 
 
-# idle -> walk -> attack 순서로 한 번씩 재생해본다.
+# idle -> walk -> attack -> jump 순서로 한 번씩 재생해본다.
 for i in range(len(FRAMES['idle'])):
     clear_canvas()
     draw_character('idle', i)
@@ -73,6 +73,12 @@ for i in range(len(FRAMES['walk'])):
 for i in range(len(FRAMES['attack'])):
     clear_canvas()
     draw_character('attack', i)
+    update_canvas()
+    delay(0.1)
+
+for i in range(len(FRAMES['jump'])):
+    clear_canvas()
+    draw_character('jump', i)
     update_canvas()
     delay(0.1)
 
