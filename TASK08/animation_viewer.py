@@ -41,7 +41,7 @@ FRAMES = {
 
 character = load_image('character_sheet.png')
 
-SCALE = 4  # 캐릭터를 화면 높이 절반 이상으로 키우기 위한 확대 배율
+SCALE = 4          # 캐릭터를 화면 높이 절반 이상으로 키우기 위한 확대 배율
 REPEAT_COUNT = 5   # 애니메이션 하나를 반복할 횟수
 PAUSE_TIME = 1.0   # 애니메이션 사이 정지 시간(초)
 PAUSE_STEP = 0.05  # 정지 중 이벤트를 확인하는 간격(초)
@@ -49,8 +49,6 @@ PAUSE_STEP = 0.05  # 정지 중 이벤트를 확인하는 간격(초)
 
 def draw_character(anim_name, frame_index):
     # 지정한 애니메이션의 frame_index번째 프레임을 화면 중앙에 그린다.
-    # clip_draw_to_origin은 (x, y)가 그릴 사각형의 왼쪽 아래 기준이라
-    # 중앙에 두려면 그릴 크기의 절반만큼 x, y를 보정해야 한다.
     left, bottom, width, height = FRAMES[anim_name][frame_index]
     draw_w, draw_h = width * SCALE, height * SCALE
     character.clip_draw_to_origin(
@@ -60,47 +58,79 @@ def draw_character(anim_name, frame_index):
     )
 
 
+running = True
+
+def handle_events():
+    # 이벤트를 처리하고, 창 닫기나 ESC 입력이 있으면 running을 꺼서 재생을 멈춘다.
+    global running
+    for event in get_events():
+        if event.type == SDL_QUIT:
+            running = False
+        elif event.type == SDL_KEYDOWN and event.key == SDLK_ESCAPE:
+            running = False
+
+
 def wait_seconds(seconds):
     # delay(seconds)로 한 번에 멈추지 않고 짧은 간격(PAUSE_STEP)으로 나눠 기다린다.
-    # 그 사이에도 get_events()를 호출해서 Windows에서 창이 '응답 없음' 상태가 되지 않게 한다.
+    # 그 사이에도 이벤트를 계속 처리해서 '응답 없음' 상태가 되지 않고 ESC/닫기 요청도 즉시 반영한다.
     elapsed = 0.0
-    while elapsed < seconds:
-        get_events()
+    while elapsed < seconds and running:
+        handle_events()
         delay(PAUSE_STEP)
         elapsed += PAUSE_STEP
 
 
-# idle -> walk -> attack -> jump 를 무한히 순환 재생한다.
-while True:
+# idle -> walk -> attack -> jump 를 무한히 순환 재생하되, 종료 요청이 오면 즉시 멈춘다.
+while running:
     for _ in range(REPEAT_COUNT):
+        if not running:
+            break
         for i in range(len(FRAMES['idle'])):
             clear_canvas()
             draw_character('idle', i)
             update_canvas()
+            handle_events()
+            if not running:
+                break
             delay(0.1)
     wait_seconds(PAUSE_TIME)
 
     for _ in range(REPEAT_COUNT):
+        if not running:
+            break
         for i in range(len(FRAMES['walk'])):
             clear_canvas()
             draw_character('walk', i)
             update_canvas()
+            handle_events()
+            if not running:
+                break
             delay(0.1)
     wait_seconds(PAUSE_TIME)
 
     for _ in range(REPEAT_COUNT):
+        if not running:
+            break
         for i in range(len(FRAMES['attack'])):
             clear_canvas()
             draw_character('attack', i)
             update_canvas()
+            handle_events()
+            if not running:
+                break
             delay(0.1)
     wait_seconds(PAUSE_TIME)
 
     for _ in range(REPEAT_COUNT):
+        if not running:
+            break
         for i in range(len(FRAMES['jump'])):
             clear_canvas()
             draw_character('jump', i)
             update_canvas()
+            handle_events()
+            if not running:
+                break
             delay(0.1)
     wait_seconds(PAUSE_TIME)
 
