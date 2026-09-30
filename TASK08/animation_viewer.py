@@ -42,6 +42,7 @@ FRAMES = {
 character = load_image('character_sheet.png')
 
 SCALE = 4  # 캐릭터를 화면 높이 절반 이상으로 키우기 위한 확대 배율
+REPEAT_COUNT = 5  # 애니메이션 하나를 반복할 횟수
 
 
 def draw_character(anim_name, frame_index):
@@ -57,29 +58,33 @@ def draw_character(anim_name, frame_index):
     )
 
 
-# idle -> walk -> attack -> jump 순서로 한 번씩 재생해본다.
-for i in range(len(FRAMES['idle'])):
-    clear_canvas()
-    draw_character('idle', i)
-    update_canvas()
-    delay(0.1)
+# idle -> walk -> attack -> jump 순서로, 각각 REPEAT_COUNT번씩 반복 재생한다.
+for _ in range(REPEAT_COUNT):
+    for i in range(len(FRAMES['idle'])):
+        clear_canvas()
+        draw_character('idle', i)
+        update_canvas()
+        delay(0.1)
 
-for i in range(len(FRAMES['walk'])):
-    clear_canvas()
-    draw_character('walk', i)
-    update_canvas()
-    delay(0.1)
+for _ in range(REPEAT_COUNT):
+    for i in range(len(FRAMES['walk'])):
+        clear_canvas()
+        draw_character('walk', i)
+        update_canvas()
+        delay(0.1)
 
-for i in range(len(FRAMES['attack'])):
-    clear_canvas()
-    draw_character('attack', i)
-    update_canvas()
-    delay(0.1)
+for _ in range(REPEAT_COUNT):
+    for i in range(len(FRAMES['attack'])):
+        clear_canvas()
+        draw_character('attack', i)
+        update_canvas()
+        delay(0.1)
 
-for i in range(len(FRAMES['jump'])):
-    clear_canvas()
-    draw_character('jump', i)
-    update_canvas()
-    delay(0.1)
+for _ in range(REPEAT_COUNT):
+    for i in range(len(FRAMES['jump'])):
+        clear_canvas()
+        draw_character('jump', i)
+        update_canvas()
+        delay(0.1)
 
 close_canvas()
