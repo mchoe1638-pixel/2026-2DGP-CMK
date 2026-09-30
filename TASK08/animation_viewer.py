@@ -45,6 +45,7 @@ SCALE = 4          # 캐릭터를 화면 높이 절반 이상으로 키우기 �
 REPEAT_COUNT = 5   # 애니메이션 하나를 반복할 횟수
 PAUSE_TIME = 1.0   # 애니메이션 사이 정지 시간(초)
 PAUSE_STEP = 0.05  # 정지 중 이벤트를 확인하는 간격(초)
+FRAME_TIME = 0.1   # 프레임 하나가 유지되는 시간(초)
 
 # [가산점A] 프레임마다 높이가 달라도(90~120px) 발 위치가 흔들리지 않도록,
 # 시트에서 가장 높은 프레임을 기준으로 화면 세로 중앙에 오는 발 위치를 미리 계산해 둔다.
@@ -54,8 +55,6 @@ FOOT_Y = CENTER_Y - (max_frame_height * SCALE) // 2
 
 def draw_character(anim_name, frame_index):
     # anim_name의 frame_index번째 프레임을 화면 중앙, 고정된 발 위치(FOOT_Y)에 그린다.
-    # clip_draw_to_origin의 (x, y)는 그릴 사각형의 왼쪽 아래 기준이라서,
-    # y는 프레임 크기와 상관없이 항상 FOOT_Y를 그대로 사용해 발 높이를 고정한다.
     left, bottom, width, height = FRAMES[anim_name][frame_index]
     draw_w, draw_h = width * SCALE, height * SCALE
     character.clip_draw_to_origin(
@@ -86,57 +85,28 @@ def wait_seconds(seconds):
         elapsed += PAUSE_STEP
 
 
+def play_animation(anim_name):
+    # anim_name 애니메이션을 REPEAT_COUNT번 반복 재생한 뒤 PAUSE_TIME만큼 정지한다.
+    # 프레임 개수는 FRAMES[anim_name]의 길이를 그대로 쓰므로 애니메이션마다 달라도 된다.
+    frames = FRAMES[anim_name]
+    for _ in range(REPEAT_COUNT):
+        if not running:
+            return
+        for frame_index in range(len(frames)):
+            clear_canvas()
+            draw_character(anim_name, frame_index)
+            update_canvas()
+            handle_events()
+            if not running:
+                return
+            delay(FRAME_TIME)
+    wait_seconds(PAUSE_TIME)
+
+
 while running:
-    for _ in range(REPEAT_COUNT):
-        if not running:
-            break
-        for i in range(len(FRAMES['idle'])):
-            clear_canvas()
-            draw_character('idle', i)
-            update_canvas()
-            handle_events()
-            if not running:
-                break
-            delay(0.1)
-    wait_seconds(PAUSE_TIME)
-
-    for _ in range(REPEAT_COUNT):
-        if not running:
-            break
-        for i in range(len(FRAMES['walk'])):
-            clear_canvas()
-            draw_character('walk', i)
-            update_canvas()
-            handle_events()
-            if not running:
-                break
-            delay(0.1)
-    wait_seconds(PAUSE_TIME)
-
-    for _ in range(REPEAT_COUNT):
-        if not running:
-            break
-        for i in range(len(FRAMES['attack'])):
-            clear_canvas()
-            draw_character('attack', i)
-            update_canvas()
-            handle_events()
-            if not running:
-                break
-            delay(0.1)
-    wait_seconds(PAUSE_TIME)
-
-    for _ in range(REPEAT_COUNT):
-        if not running:
-            break
-        for i in range(len(FRAMES['jump'])):
-            clear_canvas()
-            draw_character('jump', i)
-            update_canvas()
-            handle_events()
-            if not running:
-                break
-            delay(0.1)
-    wait_seconds(PAUSE_TIME)
+    play_animation('idle')
+    play_animation('walk')
+    play_animation('attack')
+    play_animation('jump')
 
 close_canvas()
