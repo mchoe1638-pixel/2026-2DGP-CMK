@@ -70,37 +70,38 @@ def wait_seconds(seconds):
         elapsed += PAUSE_STEP
 
 
-# idle -> walk -> attack -> jump 순서로, 각각 REPEAT_COUNT번 반복 후 PAUSE_TIME만큼 정지한다.
-for _ in range(REPEAT_COUNT):
-    for i in range(len(FRAMES['idle'])):
-        clear_canvas()
-        draw_character('idle', i)
-        update_canvas()
-        delay(0.1)
-wait_seconds(PAUSE_TIME)
+# idle -> walk -> attack -> jump 를 무한히 순환 재생한다.
+while True:
+    for _ in range(REPEAT_COUNT):
+        for i in range(len(FRAMES['idle'])):
+            clear_canvas()
+            draw_character('idle', i)
+            update_canvas()
+            delay(0.1)
+    wait_seconds(PAUSE_TIME)
 
-for _ in range(REPEAT_COUNT):
-    for i in range(len(FRAMES['walk'])):
-        clear_canvas()
-        draw_character('walk', i)
-        update_canvas()
-        delay(0.1)
-wait_seconds(PAUSE_TIME)
+    for _ in range(REPEAT_COUNT):
+        for i in range(len(FRAMES['walk'])):
+            clear_canvas()
+            draw_character('walk', i)
+            update_canvas()
+            delay(0.1)
+    wait_seconds(PAUSE_TIME)
 
-for _ in range(REPEAT_COUNT):
-    for i in range(len(FRAMES['attack'])):
-        clear_canvas()
-        draw_character('attack', i)
-        update_canvas()
-        delay(0.1)
-wait_seconds(PAUSE_TIME)
+    for _ in range(REPEAT_COUNT):
+        for i in range(len(FRAMES['attack'])):
+            clear_canvas()
+            draw_character('attack', i)
+            update_canvas()
+            delay(0.1)
+    wait_seconds(PAUSE_TIME)
 
-for _ in range(REPEAT_COUNT):
-    for i in range(len(FRAMES['jump'])):
-        clear_canvas()
-        draw_character('jump', i)
-        update_canvas()
-        delay(0.1)
-wait_seconds(PAUSE_TIME)
+    for _ in range(REPEAT_COUNT):
+        for i in range(len(FRAMES['jump'])):
+            clear_canvas()
+            draw_character('jump', i)
+            update_canvas()
+            delay(0.1)
+    wait_seconds(PAUSE_TIME)
 
 close_canvas()
