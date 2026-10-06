@@ -60,7 +60,7 @@ ESC_EVENT = key_event(viewer.SDLK_ESCAPE)
 
 
 PICO2D_FUNCTIONS = ('open_canvas', 'close_canvas', 'clear_canvas', 'update_canvas', 'delay',
-                    'get_events', 'load_image')
+                    'get_events', 'get_time', 'load_image')
 
 
 def fake_pico2d():
@@ -68,11 +68,16 @@ def fake_pico2d():
     return {name: mock.DEFAULT for name in PICO2D_FUNCTIONS}
 
 
-def run_main(events_per_call):
+def run_main(events_per_call, times=None):
     # pico2d 함수를 가짜로 바꾸고 main()을 실행한 뒤, 가짜 함수들을 돌려준다.
     # events_per_call: get_events()가 호출될 때마다 차례로 돌려줄 이벤트 목록들
+    # times: get_time()이 호출될 때마다 차례로 돌려줄 시각들 (없으면 시간이 흐르지 않는다)
     with mock.patch.multiple(viewer, **fake_pico2d()) as fakes:
         fakes['get_events'].side_effect = events_per_call
+        if times is None:
+            fakes['get_time'].return_value = 0.0
+        else:
+            fakes['get_time'].side_effect = times
         viewer.main()
     return fakes
 
@@ -122,6 +127,16 @@ class MainLoopTest(unittest.TestCase):
         sheet = fakes['load_image'].return_value
         sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 300, 116, 156)
 
+    def test_draws_frame_for_time_elapsed_since_start(self):
+        # 대기(10fps)를 시작 시각 10.0초 기준으로 0.05초, 0.35초, 1.15초 뒤에 그리면 0, 3, 0번 프레임이다.
+        fakes = run_main([[], [], [], [ESC_EVENT]], times=[10.0, 10.05, 10.35, 11.15])
+        sheet = fakes['load_image'].return_value
+        self.assertEqual(sheet.clip_draw.call_args_list, [
+            mock.call(1, 447, 29, 39, 600, 300, 116, 156),
+            mock.call(86, 447, 30, 38, 600, 300, 120, 152),
+            mock.call(1, 447, 29, 39, 600, 300, 116, 156),
+        ])
+
     def test_closes_canvas_when_sheet_cannot_be_loaded(self):
         with mock.patch.multiple(viewer, **fake_pico2d()) as fakes:
             fakes['get_events'].side_effect = [[ESC_EVENT]]
@@ -144,6 +159,24 @@ class DrawFrameTest(unittest.TestCase):
         sheet = mock.Mock()
         viewer.draw_frame(sheet, (1, 447, 29, 39), 600, 300)
         sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 300, 116, 156)
+
+
+class FrameIndexTest(unittest.TestCase):
+    def test_starts_at_first_frame(self):
+        for motion in viewer.MOTIONS:
+            self.assertEqual(viewer.frame_index(motion, 0.0), 0, motion.name)
+
+    def test_advances_one_frame_every_1_over_fps_seconds(self):
+        # 각 프레임 구간의 가운데 시각에서 확인한다. (예: 10fps면 0.05초 -> 0번, 0.15초 -> 1번)
+        for motion in viewer.MOTIONS:
+            for k in range(len(motion.frames)):
+                with self.subTest(motion=motion.name, frame=k):
+                    self.assertEqual(viewer.frame_index(motion, (k + 0.5) / motion.fps), k)
+
+    def test_returns_to_first_frame_after_last_frame(self):
+        for motion in viewer.MOTIONS:
+            one_loop = len(motion.frames) / motion.fps
+            self.assertEqual(viewer.frame_index(motion, one_loop + 0.5 / motion.fps), 0, motion.name)
 
 
 class MotionDataTest(unittest.TestCase):

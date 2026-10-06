@@ -80,6 +80,12 @@ def resource_path(file_name: str) -> str:
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), file_name)
 
 
+def frame_index(motion: Motion, elapsed: float) -> int:
+    # 재생을 시작하고 elapsed초가 지났을 때 보여 줄 프레임 번호
+    # 1/fps초마다 다음 프레임으로 넘어가고, 마지막 프레임 다음에는 첫 프레임으로 돌아간다.
+    return int(elapsed * motion.fps) % len(motion.frames)
+
+
 def draw_frame(sheet: Image, frame: Frame, x: float, y: float) -> None:
     # 시트에서 frame 영역을 잘라 가로·세로 4배로 키우고, 그림의 중심이 (x, y)에 오게 그린다.
     left, bottom, width, height = frame
@@ -100,9 +106,12 @@ def main() -> None:
     open_canvas(CANVAS_W, CANVAS_H)
     try:  # 시트를 읽지 못하는 등 오류가 나도 창은 닫는다.
         sheet = load_image(resource_path(SPRITE_FILE))
+        motion = MOTIONS[0]
+        start_time = get_time()
         while handle_events():
+            elapsed = get_time() - start_time  # 프레임 번호는 실제로 지난 시간으로 정한다.
             clear_canvas()
-            draw_frame(sheet, MOTIONS[0].frames[0], CENTER_X, CENTER_Y)
+            draw_frame(sheet, motion.frames[frame_index(motion, elapsed)], CENTER_X, CENTER_Y)
             update_canvas()
             delay(FRAME_DELAY)
     finally:
