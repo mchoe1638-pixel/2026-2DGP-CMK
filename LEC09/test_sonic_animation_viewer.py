@@ -122,19 +122,20 @@ class MainLoopTest(unittest.TestCase):
         fakes = run_main([[ESC_EVENT]])
         fakes['load_image'].assert_called_once_with(viewer.resource_path('sonic-sprite.png'))
 
-    def test_draws_first_idle_frame_at_center(self):
+    def test_draws_first_idle_frame_at_center_on_ground(self):
+        # 116x156 그림의 아래쪽 끝이 y = 150이 되려면 중심 y는 150 + 156 / 2 = 228이다.
         fakes = run_main([[], [ESC_EVENT]])
         sheet = fakes['load_image'].return_value
-        sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 300, 116, 156)
+        sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 228, 116, 156)
 
     def test_draws_frame_for_time_elapsed_since_start(self):
         # 대기(10fps)를 시작 시각 10.0초 기준으로 0.05초, 0.35초, 1.15초 뒤에 그리면 0, 3, 0번 프레임이다.
         fakes = run_main([[], [], [], [ESC_EVENT]], times=[10.0, 10.05, 10.35, 11.15])
         sheet = fakes['load_image'].return_value
         self.assertEqual(sheet.clip_draw.call_args_list, [
-            mock.call(1, 447, 29, 39, 600, 300, 116, 156),
-            mock.call(86, 447, 30, 38, 600, 300, 120, 152),
-            mock.call(1, 447, 29, 39, 600, 300, 116, 156),
+            mock.call(1, 447, 29, 39, 600, 228, 116, 156),
+            mock.call(86, 447, 30, 38, 600, 226, 120, 152),
+            mock.call(1, 447, 29, 39, 600, 228, 116, 156),
         ])
 
     def test_closes_canvas_when_sheet_cannot_be_loaded(self):
@@ -155,10 +156,20 @@ class SpriteSheetTest(unittest.TestCase):
 
 
 class DrawFrameTest(unittest.TestCase):
-    def test_draws_frame_four_times_larger_centered_at_position(self):
+    def test_draws_frame_four_times_larger_with_feet_at_given_height(self):
+        # 가로 중심은 x, 아래쪽 끝(발)은 foot_y: clip_draw에는 중심 y = foot_y + 그린 높이 / 2를 넘긴다.
         sheet = mock.Mock()
-        viewer.draw_frame(sheet, (1, 447, 29, 39), 600, 300)
-        sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 300, 116, 156)
+        viewer.draw_frame(sheet, (1, 447, 29, 39), 600, 150)
+        sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 228, 116, 156)
+
+    def test_feet_rest_on_ground_line_for_every_frame(self):
+        # 프레임 높이(26~45px)가 달라도 그림의 아래쪽 끝은 항상 발 기준선 y = 150에 놓인다.
+        for motion in viewer.MOTIONS:
+            for frame in motion.frames:
+                sheet = mock.Mock()
+                viewer.draw_frame(sheet, frame, 600, viewer.GROUND_Y)
+                *_, center_y, _, draw_h = sheet.clip_draw.call_args.args
+                self.assertEqual(center_y - draw_h / 2, 150, (motion.name, frame))
 
 
 class FrameIndexTest(unittest.TestCase):

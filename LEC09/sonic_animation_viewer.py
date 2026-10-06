@@ -8,7 +8,8 @@ from pico2d import *
 
 # 화면 설정
 CANVAS_W, CANVAS_H = 1200, 600
-CENTER_X, CENTER_Y = CANVAS_W // 2, CANVAS_H // 2
+CENTER_X = CANVAS_W // 2  # 화면 가로 중앙
+GROUND_Y = 150  # 발 기준선: 프레임 높이가 달라도 그림의 아래쪽 끝(발)을 이 높이에 맞춘다.
 FRAME_DELAY = 0.01  # 화면을 한 번 갱신한 뒤 쉬는 시간(초)
 
 # 스프라이트 설정
@@ -86,10 +87,13 @@ def frame_index(motion: Motion, elapsed: float) -> int:
     return int(elapsed * motion.fps) % len(motion.frames)
 
 
-def draw_frame(sheet: Image, frame: Frame, x: float, y: float) -> None:
-    # 시트에서 frame 영역을 잘라 가로·세로 4배로 키우고, 그림의 중심이 (x, y)에 오게 그린다.
+def draw_frame(sheet: Image, frame: Frame, x: float, foot_y: float) -> None:
+    # 시트에서 frame 영역을 잘라 가로·세로 4배로 키워 그린다.
+    # 그림의 가로 중심은 x에, 아래쪽 끝(발)은 foot_y에 맞춘다.
+    # clip_draw는 그림의 중심 좌표를 받으므로 y에는 그린 높이의 절반을 더해 넘긴다.
     left, bottom, width, height = frame
-    sheet.clip_draw(left, bottom, width, height, x, y, width * SCALE, height * SCALE)
+    draw_w, draw_h = width * SCALE, height * SCALE
+    sheet.clip_draw(left, bottom, width, height, x, foot_y + draw_h / 2, draw_w, draw_h)
 
 
 def handle_events() -> bool:
@@ -111,7 +115,7 @@ def main() -> None:
         while handle_events():
             elapsed = get_time() - start_time  # 프레임 번호는 실제로 지난 시간으로 정한다.
             clear_canvas()
-            draw_frame(sheet, motion.frames[frame_index(motion, elapsed)], CENTER_X, CENTER_Y)
+            draw_frame(sheet, motion.frames[frame_index(motion, elapsed)], CENTER_X, GROUND_Y)
             update_canvas()
             delay(FRAME_DELAY)
     finally:
