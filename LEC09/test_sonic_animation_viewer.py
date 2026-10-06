@@ -2,6 +2,7 @@
 # LEC09 폴더에서 `python -m unittest -v`로 실행한다.
 # pico2d 함수는 가짜(mock)로 바꿔 창을 열지 않고 확인한다.
 import dataclasses
+import itertools
 import os
 import re
 import unittest
@@ -82,6 +83,17 @@ def simulate(seconds, state=None, dt=0.01):
 def collapse(values):
     # 연달아 같은 값은 하나로 줄인다. (화면에 보인 프레임 번호의 순서를 보려고 쓴다)
     return [value for i, value in enumerate(values) if i == 0 or values[i - 1] != value]
+
+
+def motion_runs():
+    # 처음부터 0.01초 간격으로 1회 순환(44.75초)을 흘려보내며 동작마다 [(그 동작이 시작된 뒤 지난 시각, 상태), ...]를 모은다.
+    # 동작이 시작되는 시각은 앞선 동작들의 (5회 재생 시간 + 정지 1초)의 합이다.
+    by_motion = itertools.groupby(simulate(44.75), key=lambda sample: sample[1].motion_index)
+    runs, start = [], 0.0
+    for motion, (_, run) in zip(viewer.MOTIONS, by_motion):
+        runs.append([(t - start, state) for t, state in run])
+        start += viewer.play_time(motion) + viewer.PAUSE_TIME
+    return runs
 
 
 def key_event(key, event_type=None):
@@ -620,6 +632,80 @@ class JumpTest(unittest.TestCase):
                 for motion in viewer.MOTIONS if motion.jump_height > 0}
         self.assertEqual(tops, {'스핀 점프': 418, '공중 회전': 530})
         self.assertTrue(all(top <= 600 - 40 for top in tops.values()))
+
+
+class TimeSimulationTest(unittest.TestCase):
+    # PRD.md 9절 시간 모의 실행: update()를 0.01초 간격으로 호출해 1회 순환(44.75초)을 흘려보내고 동작마다 결과를 확인한다.
+    def test_plays_each_motion_five_times_then_pauses_one_second(self):
+        # 1번 -> 10번 동작을 차례로 5회씩 재생하고, 재생이 끝나면 1초 동안 정지한 뒤 다음 동작으로 넘어간다.
+        runs = motion_runs()
+        self.assertEqual([run[0][1].motion_index for run in runs], list(range(10)))
+        for motion, run in zip(viewer.MOTIONS, runs):
+            with self.subTest(motion=motion.name):
+                playing = [s for _, s in run if s.phase == viewer.PLAY]
+                paused = [(t, s) for t, s in run if s.phase == viewer.PAUSE]
+                self.assertEqual(collapse([viewer.repeat_number(s) for s in playing]), [1, 2, 3, 4, 5])
+                self.assertAlmostEqual(paused[0][0], viewer.play_time(motion), delta=0.0101)
+                self.assertLessEqual(abs(len(paused) - 100), 1)  # 0.01초 간격으로 1초 = 100번
+
+    def test_moving_motions_match_prd_section_6_6(self):
+        # 이동 동작 7종: x는 이동 범위 안에 있고, 반전 시각(±0.01초)·끝 위치(±1px)·끝 방향이 표와 같다.
+        table = prd_expected_moves()
+        for motion, run in zip(viewer.MOTIONS, motion_runs()):
+            if motion.speed == 0:
+                continue
+            with self.subTest(motion=motion.name):
+                low, high, turn, end_x, end_direction = table[motion.name]
+                self.assertTrue(all(low <= s.x <= high for _, s in run))
+                turns = [t for (t, s), (_, before) in zip(run[1:], run) if s.direction != before.direction]
+                if turn is None:
+                    self.assertEqual(turns, [])
+                else:
+                    self.assertEqual(len(turns), 1)
+                    self.assertAlmostEqual(turns[0], turn, delta=0.0101)
+                _, last = run[-1]  # 정지 단계의 마지막 상태
+                self.assertAlmostEqual(last.x, end_x, delta=1)
+                self.assertEqual(last.direction, end_direction)
+
+    def test_moves_while_each_frame_is_shown(self):
+        # 이동 동작은 프레임 하나가 보이는 동안에도 갱신할 때마다 x가 바뀌고, 중앙 동작은 처음부터 끝까지 x = 600이다.
+        for motion, run in zip(viewer.MOTIONS, motion_runs()):
+            with self.subTest(motion=motion.name):
+                if motion.speed == 0:
+                    self.assertEqual({(s.x, s.direction) for _, s in run}, {(600, viewer.RIGHT)})
+                    continue
+                playing = [s for _, s in run if s.phase == viewer.PLAY]
+                for _, shown in itertools.groupby(playing, key=viewer.current_frame_index):
+                    xs = [s.x for s in shown]
+                    self.assertGreater(len(xs), 1)
+                    self.assertTrue(all(before != after for before, after in zip(xs, xs[1:])))
+
+    def test_pause_holds_last_frame_and_position_on_ground(self):
+        # 1초 정지 동안 마지막 프레임을 같은 위치·방향으로 보여 주고, 발은 기준선에 있다(점프 높이 0).
+        for motion, run in zip(viewer.MOTIONS, motion_runs()):
+            with self.subTest(motion=motion.name):
+                paused = [s for _, s in run if s.phase == viewer.PAUSE]
+                shown = {(viewer.current_frame_index(s), s.x, s.direction, viewer.jump_offset(s)) for s in paused}
+                self.assertEqual(len(shown), 1)
+                frame, _, _, jump = shown.pop()
+                self.assertEqual((frame, jump), (len(motion.frames) - 1, 0))
+
+    def test_jumping_motions_rise_and_land_in_every_loop(self):
+        # 스핀 점프와 공중 회전은 회차마다 가운데에서 꼭대기(H)에 오르고, 회차가 바뀌는 순간 기준선(0)에 내려온다.
+        for motion, run in zip(viewer.MOTIONS, motion_runs()):
+            if motion.jump_height == 0:
+                continue
+            with self.subTest(motion=motion.name):
+                heights = [viewer.jump_offset(s) for _, s in run if s.phase == viewer.PLAY]
+                neighbours = list(zip(heights, heights[1:], heights[2:]))
+                tops = [h for before, h, after in neighbours if before < h >= after]
+                landings = [h for before, h, after in neighbours if before > h <= after]
+                self.assertEqual(len(tops), 5)
+                self.assertEqual(len(landings), 4)  # 1 ~ 4회째가 끝나는 순간 (5회째가 끝나면 정지 단계로 넘어간다)
+                for top in tops:
+                    self.assertAlmostEqual(top, motion.jump_height, delta=0.01)
+                for landing in landings:
+                    self.assertAlmostEqual(landing, 0, delta=0.01)
 
 
 class MotionDataTest(unittest.TestCase):
