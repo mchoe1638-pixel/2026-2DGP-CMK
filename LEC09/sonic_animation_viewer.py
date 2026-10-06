@@ -18,6 +18,7 @@ SCALE = 4  # 원본 대비 확대 배율
 
 # 재생 설정
 REPEAT_COUNT = 5  # 동작 하나를 처음부터 끝까지 되풀이해 재생하는 횟수
+PAUSE_TIME = 1.0  # 5회 재생을 마친 뒤 마지막 프레임에 멈춰 있는 시간(초)
 
 # 재생 단계: 프레임을 넘기며 재생하는 중(PLAY)이거나, 마지막 프레임에서 멈춰 있는 중(PAUSE)이다.
 PLAY, PAUSE = 'PLAY', 'PAUSE'
@@ -120,14 +121,28 @@ def current_frame_index(state: ViewerState) -> int:
     return frame_index(motion, state.elapsed)
 
 
+def phase_time(state: ViewerState) -> float:
+    # 지금 단계가 이어지는 시간(초): 재생 단계는 5회 재생 시간, 정지 단계는 PAUSE_TIME
+    if state.phase == PAUSE:
+        return PAUSE_TIME
+    return play_time(MOTIONS[state.motion_index])
+
+
+def next_phase(state: ViewerState) -> ViewerState:
+    # 지금 단계가 끝났을 때 이어지는 단계의 시작 상태
+    # 5회 재생이 끝나면 정지하고, 정지가 끝나면 같은 동작을 처음부터 다시 재생한다.
+    if state.phase == PLAY:
+        return replace(state, phase=PAUSE, elapsed=0.0)
+    return replace(state, phase=PLAY, elapsed=0.0)
+
+
 def update(state: ViewerState, dt: float) -> ViewerState:
     # dt초가 지난 뒤의 상태를 새로 만들어 돌려준다.
-    # 5회 재생이 끝나면 정지 단계로 넘어가고, 재생 시간을 넘긴 만큼은 정지 단계에서 지난 시간으로 센다.
-    elapsed = state.elapsed + dt
-    limit = play_time(MOTIONS[state.motion_index])
-    if state.phase == PLAY and elapsed >= limit:
-        return replace(state, phase=PAUSE, elapsed=elapsed - limit)
-    return replace(state, elapsed=elapsed)
+    # 그사이 지금 단계가 끝나면 다음 단계로 넘기고, 남은 시간은 다음 단계에서 이어서 센다.
+    while state.elapsed + dt >= phase_time(state):
+        dt -= phase_time(state) - state.elapsed
+        state = next_phase(state)
+    return replace(state, elapsed=state.elapsed + dt)
 
 
 def draw_frame(sheet: Image, frame: Frame, x: float, foot_y: float) -> None:

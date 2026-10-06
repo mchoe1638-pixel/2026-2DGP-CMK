@@ -155,6 +155,13 @@ class MainLoopTest(unittest.TestCase):
             mock.call(302, 448, 29, 26, 600, 202, 116, 104),
         ])
 
+    def test_escape_during_pause_closes_canvas_at_once(self):
+        # 대기 정지 중(5.8초)에 ESC를 누르면 정지 1초가 끝나기를 기다리지 않고 바로 끝낸다.
+        # 정지 중에 시각을 따로 더 읽으며 기다리면 준비한 시각 목록이 모자라 오류가 난다.
+        fakes = run_main([[], [ESC_EVENT]], times=[0.0, 5.8])
+        self.assertEqual(fakes['update_canvas'].call_count, 1)
+        fakes['close_canvas'].assert_called_once_with()
+
     def test_draws_frame_for_time_elapsed_since_start(self):
         # 대기(10fps)를 시작 시각 10.0초 기준으로 0.05초, 0.35초, 1.15초 뒤에 그리면 0, 3, 0번 프레임이다.
         fakes = run_main([[], [], [], [ESC_EVENT]], times=[10.0, 10.05, 10.35, 11.15])
@@ -266,6 +273,30 @@ class RepeatTest(unittest.TestCase):
         self.assertEqual(state.phase, viewer.PAUSE)
         self.assertAlmostEqual(state.elapsed, 0.4)
         self.assertEqual(viewer.current_frame_index(state), 10)
+
+
+class PauseTest(unittest.TestCase):
+    def test_pause_time_is_one_second(self):
+        self.assertEqual(viewer.PAUSE_TIME, 1.0)
+
+    def test_holds_last_frame_for_one_second_then_plays_again(self):
+        # 동작마다 0.01초 간격으로 재생 시간 + 1.5초를 흘려보내며 정지 단계를 살펴본다.
+        for index, motion in enumerate(viewer.MOTIONS):
+            with self.subTest(motion=motion.name):
+                history = simulate(viewer.play_time(motion) + 1.5, viewer.ViewerState(motion_index=index))
+                paused = [(t, s) for t, s in history if s.phase == viewer.PAUSE]
+                self.assertAlmostEqual(paused[0][0], viewer.play_time(motion), delta=0.0101)
+                self.assertLessEqual(abs(len(paused) - 100), 1)  # 0.01초 간격으로 1초 = 100번
+                self.assertEqual({viewer.current_frame_index(s) for _, s in paused}, {len(motion.frames) - 1})
+                _, after = history[-1]
+                self.assertEqual(after.phase, viewer.PLAY)
+                self.assertAlmostEqual(after.elapsed, 0.5, delta=0.0101)
+
+    def test_long_time_step_can_pass_whole_pause(self):
+        # 한 번에 6.8초가 지나면 대기 재생 5.5초와 정지 1초를 모두 마치고 새 재생 단계 0.3초째다.
+        state = viewer.update(viewer.ViewerState(), 6.8)
+        self.assertEqual(state.phase, viewer.PLAY)
+        self.assertAlmostEqual(state.elapsed, 0.3)
 
 
 class MotionDataTest(unittest.TestCase):
