@@ -133,9 +133,14 @@ def play_time(motion: Motion) -> float:
     return loop_time(motion) * REPEAT_COUNT
 
 
+def current_motion(state: ViewerState) -> Motion:
+    # 지금 재생하거나 멈춰 있는 동작
+    return MOTIONS[state.motion_index]
+
+
 def current_frame_index(state: ViewerState) -> int:
     # 지금 보여 줄 프레임 번호: 재생 중에는 지난 시간으로 정하고, 멈춘 뒤에는 마지막 프레임에 머문다.
-    motion = MOTIONS[state.motion_index]
+    motion = current_motion(state)
     if state.phase == PAUSE:
         return len(motion.frames) - 1
     return frame_index(motion, state.elapsed)
@@ -145,7 +150,7 @@ def repeat_number(state: ViewerState) -> int:
     # 지금 몇 번째 반복을 재생하는지(1 ~ REPEAT_COUNT). 정지 중에는 마지막 반복을 마친 상태다.
     if state.phase == PAUSE:
         return REPEAT_COUNT
-    return min(int(state.elapsed / loop_time(MOTIONS[state.motion_index])) + 1, REPEAT_COUNT)
+    return min(int(state.elapsed / loop_time(current_motion(state))) + 1, REPEAT_COUNT)
 
 
 def jump_offset(state: ViewerState) -> float:
@@ -154,15 +159,16 @@ def jump_offset(state: ViewerState) -> float:
     # 정지 중에는 기준선에 서 있다.
     if state.phase == PAUSE:
         return 0.0
-    motion = MOTIONS[state.motion_index]
-    p = state.elapsed % loop_time(motion) / loop_time(motion)
+    motion = current_motion(state)
+    one_loop = loop_time(motion)
+    p = state.elapsed % one_loop / one_loop
     return motion.jump_height * 4 * p * (1 - p)
 
 
 def hud_text(state: ViewerState) -> str:
     # 화면 왼쪽 위에 띄울 상태 글자: 동작 순번·이름, 반복 횟수, 프레임 번호, 재생 중 또는 정지 경과 시간
     # 정지 시간은 0.1초 단위로 버려서 정지가 끝나기 전에 1.0초로 보이지 않게 한다.
-    motion = MOTIONS[state.motion_index]
+    motion = current_motion(state)
     if state.phase == PAUSE:
         status = f'정지 {int(state.elapsed * 10) / 10:.1f}/{PAUSE_TIME:.1f}초'
     else:
@@ -176,7 +182,7 @@ def phase_time(state: ViewerState) -> float:
     # 지금 단계가 이어지는 시간(초): 재생 단계는 5회 재생 시간, 정지 단계는 PAUSE_TIME
     if state.phase == PAUSE:
         return PAUSE_TIME
-    return play_time(MOTIONS[state.motion_index])
+    return play_time(current_motion(state))
 
 
 def next_phase(state: ViewerState) -> ViewerState:
@@ -210,7 +216,7 @@ def advance(state: ViewerState, dt: float) -> ViewerState:
     # 재생 중에는 보는 방향으로 동작의 이동 속도만큼 움직이고(화면 끝에서는 돌아선다), 정지 중에는 그 자리에 머문다.
     if state.phase == PAUSE:
         return replace(state, elapsed=state.elapsed + dt)
-    motion = MOTIONS[state.motion_index]
+    motion = current_motion(state)
     moved_x = state.x + state.direction * motion.speed * dt
     x, direction = reflect(moved_x, state.direction, *x_limits(motion))
     return replace(state, elapsed=state.elapsed + dt, x=x, direction=direction)
@@ -240,7 +246,7 @@ def draw_frame(sheet: Image, frame: Frame, x: float, foot_y: float, direction: i
 def draw_viewer(sheet: Image, font: Font, state: ViewerState) -> None:
     # 화면을 지우고 지금 상태의 프레임과 상태 글자를 그린 뒤 화면에 내보낸다.
     # 프레임은 발이 기준선에서 지금 점프 높이만큼 떠 있게 그린다.
-    motion = MOTIONS[state.motion_index]
+    motion = current_motion(state)
     foot_y = GROUND_Y + jump_offset(state)
     clear_canvas()
     draw_frame(sheet, motion.frames[current_frame_index(state)], state.x, foot_y, state.direction)
@@ -259,6 +265,7 @@ def handle_events() -> bool:
 
 
 def main() -> None:
+    # 창을 열고, ESC 키를 누르거나 창을 닫을 때까지 상태를 갱신하며 화면을 그린다.
     open_canvas(CANVAS_W, CANVAS_H)
     try:  # 시트나 글꼴을 읽지 못하는 등 오류가 나도 창은 닫는다.
         sheet = load_image(resource_path(SPRITE_FILE))
