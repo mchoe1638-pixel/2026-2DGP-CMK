@@ -175,13 +175,33 @@ def next_phase(state: ViewerState) -> ViewerState:
     return ViewerState(motion_index=(state.motion_index + 1) % len(MOTIONS))
 
 
+def x_limits(motion: Motion) -> tuple[float, float]:
+    # 그 동작의 어떤 프레임을 그려도 화면 밖으로 나가지 않는 x의 범위(왼쪽 끝, 오른쪽 끝)
+    # 가장 넓은 프레임을 그린 폭의 절반만큼 화면 양쪽 끝에서 안쪽으로 들어온다.
+    half = max(width for _, _, width, _ in motion.frames) * SCALE / 2
+    return half, CANVAS_W - half
+
+
+def reflect(x: float, direction: int, low: float, high: float) -> tuple[float, int]:
+    # x가 범위(low ~ high)를 넘었으면 넘은 거리만큼 반대쪽으로 되돌리고 방향을 바꾼다(반사).
+    # 한 번에 많이 움직여 반대쪽 끝까지 넘어가면 범위 안에 들어올 때까지 되풀이한다.
+    while not low <= x <= high:
+        if x > high:
+            x, direction = 2 * high - x, LEFT
+        else:
+            x, direction = 2 * low - x, RIGHT
+    return x, direction
+
+
 def advance(state: ViewerState, dt: float) -> ViewerState:
     # 지금 단계 안에서 dt초가 지난 상태
-    # 재생 중에는 보는 방향으로 동작의 이동 속도만큼 움직이고, 정지 중에는 그 자리에 머문다.
+    # 재생 중에는 보는 방향으로 동작의 이동 속도만큼 움직이고(화면 끝에서는 돌아선다), 정지 중에는 그 자리에 머문다.
     if state.phase == PAUSE:
         return replace(state, elapsed=state.elapsed + dt)
-    speed = MOTIONS[state.motion_index].speed
-    return replace(state, elapsed=state.elapsed + dt, x=state.x + state.direction * speed * dt)
+    motion = MOTIONS[state.motion_index]
+    moved_x = state.x + state.direction * motion.speed * dt
+    x, direction = reflect(moved_x, state.direction, *x_limits(motion))
+    return replace(state, elapsed=state.elapsed + dt, x=x, direction=direction)
 
 
 def update(state: ViewerState, dt: float) -> ViewerState:
@@ -194,20 +214,22 @@ def update(state: ViewerState, dt: float) -> ViewerState:
     return advance(state, dt)
 
 
-def draw_frame(sheet: Image, frame: Frame, x: float, foot_y: float) -> None:
+def draw_frame(sheet: Image, frame: Frame, x: float, foot_y: float, direction: int) -> None:
     # 시트에서 frame 영역을 잘라 가로·세로 4배로 키워 그린다.
     # 그림의 가로 중심은 x에, 아래쪽 끝(발)은 foot_y에 맞춘다.
-    # clip_draw는 그림의 중심 좌표를 받으므로 y에는 그린 높이의 절반을 더해 넘긴다.
+    # 시트의 소닉은 오른쪽을 보므로 왼쪽을 볼 때는 좌우를 뒤집어('h') 그린다. (회전 각도는 0)
+    # clip_composite_draw는 그림의 중심 좌표를 받으므로 y에는 그린 높이의 절반을 더해 넘긴다.
     left, bottom, width, height = frame
     draw_w, draw_h = width * SCALE, height * SCALE
-    sheet.clip_draw(left, bottom, width, height, x, foot_y + draw_h / 2, draw_w, draw_h)
+    flip = 'h' if direction == LEFT else ''
+    sheet.clip_composite_draw(left, bottom, width, height, 0, flip, x, foot_y + draw_h / 2, draw_w, draw_h)
 
 
 def draw_viewer(sheet: Image, font: Font, state: ViewerState) -> None:
     # 화면을 지우고 지금 상태의 프레임과 상태 글자를 그린 뒤 화면에 내보낸다.
     motion = MOTIONS[state.motion_index]
     clear_canvas()
-    draw_frame(sheet, motion.frames[current_frame_index(state)], state.x, GROUND_Y)
+    draw_frame(sheet, motion.frames[current_frame_index(state)], state.x, GROUND_Y, state.direction)
     font.draw(HUD_X, HUD_Y, hud_text(state), HUD_COLOR)
     update_canvas()
 

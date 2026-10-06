@@ -60,6 +60,15 @@ def prd_movement_table():
             for name, kind, speed, distance, jump in rows}
 
 
+def prd_expected_moves():
+    # PRD.md 6.6절 표에서 {동작 이름: (이동 범위 왼쪽 끝, 오른쪽 끝, 반전 시각 또는 None, 끝 위치, 끝 방향)}을 읽는다.
+    rows = re.findall(r'^\| ([^|]+?) \| (\d+) ~ (\d+) \| (?:([\d.]+)초 \([^)]*\)|없음) \| (\d+) \| (왼쪽|오른쪽) \|$',
+                      read_prd(), re.MULTILINE)
+    return {name: (int(low), int(high), float(turn) if turn else None, int(end),
+                   viewer.LEFT if facing == '왼쪽' else viewer.RIGHT)
+            for name, low, high, turn, end, facing in rows}
+
+
 def simulate(seconds, state=None, dt=0.01):
     # update()를 dt초 간격으로 호출해 seconds초를 흘려보내고, 호출할 때마다 (시각, 새 상태)를 모은다.
     state = state or viewer.ViewerState()
@@ -151,16 +160,16 @@ class MainLoopTest(unittest.TestCase):
         # 116x156 그림의 아래쪽 끝이 y = 150이 되려면 중심 y는 150 + 156 / 2 = 228이다.
         fakes = run_main([[], [ESC_EVENT]])
         sheet = fakes['load_image'].return_value
-        sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 228, 116, 156)
+        sheet.clip_composite_draw.assert_called_once_with(1, 447, 29, 39, 0, '', 600, 228, 116, 156)
 
     def test_holds_last_frame_after_five_loops(self):
         # 대기 5회 재생은 5.5초: 5.35초에는 9번 프레임, 5.6초와 6.3초에는 마지막(10번) 프레임에 머문다.
         fakes = run_main([[], [], [], [ESC_EVENT]], times=[0.0, 5.35, 5.6, 6.3])
         sheet = fakes['load_image'].return_value
-        self.assertEqual(sheet.clip_draw.call_args_list, [
-            mock.call(270, 448, 24, 32, 600, 214, 96, 128),
-            mock.call(302, 448, 29, 26, 600, 202, 116, 104),
-            mock.call(302, 448, 29, 26, 600, 202, 116, 104),
+        self.assertEqual(sheet.clip_composite_draw.call_args_list, [
+            mock.call(270, 448, 24, 32, 0, '', 600, 214, 96, 128),
+            mock.call(302, 448, 29, 26, 0, '', 600, 202, 116, 104),
+            mock.call(302, 448, 29, 26, 0, '', 600, 202, 116, 104),
         ])
 
     def test_escape_during_pause_closes_canvas_at_once(self):
@@ -174,27 +183,33 @@ class MainLoopTest(unittest.TestCase):
         # 대기는 5.5초 재생 + 1초 정지: 6.45초에는 대기 마지막 프레임, 6.55초에는 걷기 첫 프레임을 그린다.
         # 걷기는 6.5초에 x = 600에서 출발해 0.05초 동안 150px/초로 움직였으므로 x = 607.5에 그린다.
         fakes = run_main([[], [], [ESC_EVENT]], times=[0.0, 6.45, 6.55])
-        idle_call, walk_call = fakes['load_image'].return_value.clip_draw.call_args_list
-        self.assertEqual(idle_call, mock.call(302, 448, 29, 26, 600, 202, 116, 104))
-        left, bottom, width, height, x, y, draw_w, draw_h = walk_call.args
-        self.assertEqual((left, bottom, width, height, y, draw_w, draw_h), (8, 408, 26, 37, 224, 104, 148))
+        idle_call, walk_call = fakes['load_image'].return_value.clip_composite_draw.call_args_list
+        self.assertEqual(idle_call, mock.call(302, 448, 29, 26, 0, '', 600, 202, 116, 104))
+        *frame_and_flip, x, y, draw_w, draw_h = walk_call.args
+        self.assertEqual((*frame_and_flip, y, draw_w, draw_h), (8, 408, 26, 37, 0, '', 224, 104, 148))
         self.assertAlmostEqual(x, 607.5)
 
     def test_draws_frame_for_time_elapsed_since_start(self):
         # 대기(10fps)를 시작 시각 10.0초 기준으로 0.05초, 0.35초, 1.15초 뒤에 그리면 0, 3, 0번 프레임이다.
         fakes = run_main([[], [], [], [ESC_EVENT]], times=[10.0, 10.05, 10.35, 11.15])
         sheet = fakes['load_image'].return_value
-        self.assertEqual(sheet.clip_draw.call_args_list, [
-            mock.call(1, 447, 29, 39, 600, 228, 116, 156),
-            mock.call(86, 447, 30, 38, 600, 226, 120, 152),
-            mock.call(1, 447, 29, 39, 600, 228, 116, 156),
+        self.assertEqual(sheet.clip_composite_draw.call_args_list, [
+            mock.call(1, 447, 29, 39, 0, '', 600, 228, 116, 156),
+            mock.call(86, 447, 30, 38, 0, '', 600, 226, 120, 152),
+            mock.call(1, 447, 29, 39, 0, '', 600, 228, 116, 156),
         ])
 
     def test_draws_walking_sonic_at_moved_x(self):
         # 걷기는 6.5초에 x = 600에서 시작해 150px/초로 움직인다: 7.5초에는 x = 750에 첫 프레임을 그린다.
         fakes = run_main([[], [ESC_EVENT]], times=[0.0, 7.5])
         sheet = fakes['load_image'].return_value
-        sheet.clip_draw.assert_called_once_with(8, 408, 26, 37, 750, 224, 104, 148)
+        sheet.clip_composite_draw.assert_called_once_with(8, 408, 26, 37, 0, '', 750, 224, 104, 148)
+
+    def test_draws_walking_sonic_flipped_after_turning_back(self):
+        # 걷기는 4초 동안 600px을 가려다 오른쪽 끝(1126)에서 74px 되돌아온다: 10.5초에는 x = 1052에서 왼쪽을 본다.
+        fakes = run_main([[], [ESC_EVENT]], times=[0.0, 10.5])
+        sheet = fakes['load_image'].return_value
+        sheet.clip_composite_draw.assert_called_once_with(8, 408, 26, 37, 0, 'h', 1052, 224, 104, 148)
 
     def test_loads_hangul_font_bundled_with_pico2d(self):
         fakes = run_main([[ESC_EVENT]])
@@ -243,18 +258,24 @@ class FontTest(unittest.TestCase):
 
 class DrawFrameTest(unittest.TestCase):
     def test_draws_frame_four_times_larger_with_feet_at_given_height(self):
-        # 가로 중심은 x, 아래쪽 끝(발)은 foot_y: clip_draw에는 중심 y = foot_y + 그린 높이 / 2를 넘긴다.
+        # 가로 중심은 x, 아래쪽 끝(발)은 foot_y: 그리기 함수에는 중심 y = foot_y + 그린 높이 / 2를 넘긴다.
         sheet = mock.Mock()
-        viewer.draw_frame(sheet, (1, 447, 29, 39), 600, 150)
-        sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 228, 116, 156)
+        viewer.draw_frame(sheet, (1, 447, 29, 39), 600, 150, viewer.RIGHT)
+        sheet.clip_composite_draw.assert_called_once_with(1, 447, 29, 39, 0, '', 600, 228, 116, 156)
+
+    def test_flips_frame_horizontally_when_facing_left(self):
+        # 시트의 소닉은 오른쪽을 보므로 왼쪽을 볼 때는 좌우를 뒤집어('h') 그린다.
+        sheet = mock.Mock()
+        viewer.draw_frame(sheet, (8, 408, 26, 37), 1052, 150, viewer.LEFT)
+        sheet.clip_composite_draw.assert_called_once_with(8, 408, 26, 37, 0, 'h', 1052, 224, 104, 148)
 
     def test_feet_rest_on_ground_line_for_every_frame(self):
         # 프레임 높이(26~45px)가 달라도 그림의 아래쪽 끝은 항상 발 기준선 y = 150에 놓인다.
         for motion in viewer.MOTIONS:
             for frame in motion.frames:
                 sheet = mock.Mock()
-                viewer.draw_frame(sheet, frame, 600, viewer.GROUND_Y)
-                *_, center_y, _, draw_h = sheet.clip_draw.call_args.args
+                viewer.draw_frame(sheet, frame, 600, viewer.GROUND_Y, viewer.RIGHT)
+                *_, center_y, _, draw_h = sheet.clip_composite_draw.call_args.args
                 self.assertEqual(center_y - draw_h / 2, 150, (motion.name, frame))
 
 
@@ -484,6 +505,59 @@ class MovementTest(unittest.TestCase):
         self.assertEqual(state.phase, viewer.PAUSE)
         self.assertAlmostEqual(state.x, 900.0)
         self.assertAlmostEqual(state.elapsed, 0.4)
+
+
+class BoundaryTest(unittest.TestCase):
+    def test_x_limits_match_prd_section_6_6(self):
+        # 이동 범위 = 가장 넓은 프레임을 그린 폭의 절반 ~ 1200 - 그 절반
+        table = prd_expected_moves()
+        moving = [motion for motion in viewer.MOTIONS if motion.speed > 0]
+        self.assertEqual(sorted(table), sorted(motion.name for motion in moving))
+        for motion in moving:
+            with self.subTest(motion=motion.name):
+                low, high, *_ = table[motion.name]
+                self.assertEqual(viewer.x_limits(motion), (low, high))
+
+    def test_every_frame_stays_on_screen_inside_limits(self):
+        # 범위 양 끝에 어떤 프레임을 그려도 그림이 화면(0 ~ 1200) 밖으로 나가지 않는다.
+        for motion in viewer.MOTIONS:
+            low, high = viewer.x_limits(motion)
+            for _, _, width, _ in motion.frames:
+                half = width * 4 / 2
+                self.assertGreaterEqual(low - half, 0, motion.name)
+                self.assertLessEqual(high + half, 1200, motion.name)
+
+    def test_reflect_returns_overshoot_and_turns_around(self):
+        right, left = viewer.RIGHT, viewer.LEFT
+        cases = {
+            (600, right): (600, right),  # 범위 안: 그대로
+            (1126, right): (1126, right),  # 경계에 딱 닿은 것은 넘은 것이 아니다.
+            (1130, right): (1122, left),  # 오른쪽 끝을 4px 넘음: 4px 되돌아오고 왼쪽을 본다.
+            (70, left): (78, right),  # 왼쪽 끝을 4px 넘음: 4px 되돌아오고 오른쪽을 본다.
+            (2200, right): (96, right),  # 오른쪽 끝에서 52까지 되돌아오다 왼쪽 끝을 22px 넘음: 두 번 반사
+        }
+        for (x, direction), expected in cases.items():
+            with self.subTest(x=x, direction=direction):
+                self.assertEqual(viewer.reflect(x, direction, 74, 1126), expected)
+
+    def test_turns_back_at_right_edge(self):
+        # 걷기 x = 1050에서 1초 동안 150px 가면 1200: 오른쪽 끝 1126을 74px 넘어 1052로 돌아오고 왼쪽을 본다.
+        state = viewer.update(viewer.ViewerState(motion_index=1, elapsed=3.0, x=1050.0), 1.0)
+        self.assertEqual((state.x, state.direction), (1052, viewer.LEFT))
+
+    def test_turns_back_at_left_edge(self):
+        # 왼쪽을 보는 걷기 x = 100에서 0.5초 동안 75px 가면 25: 왼쪽 끝 74를 49px 넘어 123으로 돌아온다.
+        start = viewer.ViewerState(motion_index=1, elapsed=1.0, x=100.0, direction=viewer.LEFT)
+        state = viewer.update(start, 0.5)
+        self.assertEqual((state.x, state.direction), (123, viewer.RIGHT))
+
+    def test_walk_turns_once_and_stays_inside_limits(self):
+        # 걷기 5회 재생(5초): x는 74 ~ 1126 안에 있고, 3.51초쯤 오른쪽 끝에서 한 번만 돌아선다.
+        history = simulate(5.0, viewer.ViewerState(motion_index=1))
+        self.assertTrue(all(74 <= s.x <= 1126 for _, s in history))
+        self.assertEqual(collapse([s.direction for _, s in history]), [viewer.RIGHT, viewer.LEFT])
+        turned_at = next(t for t, s in history if s.direction == viewer.LEFT)
+        self.assertAlmostEqual(turned_at, 3.51, delta=0.0101)
 
 
 class MotionDataTest(unittest.TestCase):
