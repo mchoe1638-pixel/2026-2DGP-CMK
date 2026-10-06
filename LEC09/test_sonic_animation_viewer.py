@@ -44,10 +44,27 @@ def prd_frames():
     return [(name, frames) for name, frames, _ in motions]
 
 
-def prd_fps():
-    # PRD.md 5.3절 표에서 {동작 이름: (프레임 수, fps)}를 읽는다.
-    rows = re.findall(r'^\| \d+ \| ([^|]+?) \| \d+ \| (\d+) \| (\d+) \|', read_prd(), re.MULTILINE)
-    return {name: (int(count), int(fps)) for name, count, fps in rows}
+def prd_motion_table():
+    # PRD.md 5.3절 표에서 {동작 이름: (프레임 수, fps, 1회 재생 시간, 5회 재생 시간)}을 읽는다.
+    rows = re.findall(r'^\| \d+ \| ([^|]+?) \| \d+ \| (\d+) \| (\d+) \| ([\d.]+) \| ([\d.]+) \|',
+                      read_prd(), re.MULTILINE)
+    return {name: (int(count), int(fps), float(loop), float(play))
+            for name, count, fps, loop, play in rows}
+
+
+def simulate(seconds, state=None, dt=0.01):
+    # update()를 dt초 간격으로 호출해 seconds초를 흘려보내고, 호출할 때마다 (시각, 새 상태)를 모은다.
+    state = state or viewer.ViewerState()
+    history = []
+    for step in range(1, round(seconds / dt) + 1):
+        state = viewer.update(state, dt)
+        history.append((step * dt, state))
+    return history
+
+
+def collapse(values):
+    # 연달아 같은 값은 하나로 줄인다. (화면에 보인 프레임 번호의 순서를 보려고 쓴다)
+    return [value for i, value in enumerate(values) if i == 0 or values[i - 1] != value]
 
 
 def key_event(key, event_type=None):
@@ -128,6 +145,16 @@ class MainLoopTest(unittest.TestCase):
         sheet = fakes['load_image'].return_value
         sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 228, 116, 156)
 
+    def test_holds_last_frame_after_five_loops(self):
+        # 대기 5회 재생은 5.5초: 5.35초에는 9번 프레임, 5.6초와 6.3초에는 마지막(10번) 프레임에 머문다.
+        fakes = run_main([[], [], [], [ESC_EVENT]], times=[0.0, 5.35, 5.6, 6.3])
+        sheet = fakes['load_image'].return_value
+        self.assertEqual(sheet.clip_draw.call_args_list, [
+            mock.call(270, 448, 24, 32, 600, 214, 96, 128),
+            mock.call(302, 448, 29, 26, 600, 202, 116, 104),
+            mock.call(302, 448, 29, 26, 600, 202, 116, 104),
+        ])
+
     def test_draws_frame_for_time_elapsed_since_start(self):
         # 대기(10fps)를 시작 시각 10.0초 기준으로 0.05초, 0.35초, 1.15초 뒤에 그리면 0, 3, 0번 프레임이다.
         fakes = run_main([[], [], [], [ESC_EVENT]], times=[10.0, 10.05, 10.35, 11.15])
@@ -190,6 +217,57 @@ class FrameIndexTest(unittest.TestCase):
             self.assertEqual(viewer.frame_index(motion, one_loop + 0.5 / motion.fps), 0, motion.name)
 
 
+class RepeatTest(unittest.TestCase):
+    def test_starts_playing_first_motion_from_the_beginning(self):
+        state = viewer.ViewerState()
+        self.assertEqual((state.motion_index, state.phase, state.elapsed), (0, viewer.PLAY, 0.0))
+
+    def test_loop_and_play_times_match_prd_section_5_3(self):
+        table = prd_motion_table()
+        self.assertEqual(viewer.REPEAT_COUNT, 5)
+        for motion in viewer.MOTIONS:
+            _, _, loop, play = table[motion.name]
+            self.assertAlmostEqual(viewer.loop_time(motion), loop, delta=1e-9, msg=motion.name)
+            self.assertAlmostEqual(viewer.play_time(motion), play, delta=1e-9, msg=motion.name)
+
+    def test_update_returns_new_state_and_keeps_old_one(self):
+        state = viewer.ViewerState()
+        new_state = viewer.update(state, 0.25)
+        self.assertEqual(state.elapsed, 0.0)
+        self.assertAlmostEqual(new_state.elapsed, 0.25)
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            state.elapsed = 1.0
+
+    def test_plays_every_frame_five_times_then_holds_last_frame(self):
+        # 동작마다 0.01초 간격으로 재생 시간 + 0.5초를 흘려보내며 화면에 보이는 프레임을 기록한다.
+        for index, motion in enumerate(viewer.MOTIONS):
+            with self.subTest(motion=motion.name):
+                start = viewer.ViewerState(motion_index=index)
+                history = simulate(viewer.play_time(motion) + 0.5, start)
+                playing = [viewer.current_frame_index(s) for _, s in history if s.phase == viewer.PLAY]
+                holding = [viewer.current_frame_index(s) for _, s in history if s.phase == viewer.PAUSE]
+                last = len(motion.frames) - 1
+                self.assertEqual(collapse(playing), list(range(last + 1)) * 5)
+                self.assertGreater(len(holding), 40)
+                self.assertEqual(set(holding), {last})
+                self.assertEqual({s.motion_index for _, s in history}, {index})
+
+    def test_stops_exactly_when_fifth_loop_ends(self):
+        # 대기 5회 재생은 5.5초: 5.49초에는 재생 중, 5.51초에는 정지 0.01초째
+        before = viewer.update(viewer.ViewerState(), 5.49)
+        after = viewer.update(before, 0.02)
+        self.assertEqual(before.phase, viewer.PLAY)
+        self.assertEqual(after.phase, viewer.PAUSE)
+        self.assertAlmostEqual(after.elapsed, 0.01)
+
+    def test_long_time_step_carries_over_into_pause(self):
+        # 한 번에 5.9초가 지나도 재생 5.5초를 넘은 0.4초는 정지 단계에서 지난 시간으로 센다.
+        state = viewer.update(viewer.ViewerState(), 5.9)
+        self.assertEqual(state.phase, viewer.PAUSE)
+        self.assertAlmostEqual(state.elapsed, 0.4)
+        self.assertEqual(viewer.current_frame_index(state), 10)
+
+
 class MotionDataTest(unittest.TestCase):
     def all_frames(self):
         return [(motion.name, frame) for motion in viewer.MOTIONS for frame in motion.frames]
@@ -207,9 +285,10 @@ class MotionDataTest(unittest.TestCase):
         self.assertEqual(registered, prd_frames())
 
     def test_fps_match_prd_section_5_3(self):
-        table = prd_fps()
+        table = prd_motion_table()
         for motion in viewer.MOTIONS:
-            self.assertEqual((len(motion.frames), motion.fps), table[motion.name], motion.name)
+            count, fps, _, _ = table[motion.name]
+            self.assertEqual((len(motion.frames), motion.fps), (count, fps), motion.name)
 
     def test_frames_stay_inside_sheet(self):
         sheet_w, sheet_h = SHEET_SIZE

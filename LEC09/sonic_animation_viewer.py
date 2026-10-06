@@ -2,7 +2,7 @@
 # sonic-sprite.png에 있는 소닉의 동작을 원본의 4배 크기로 순서대로 재생한다.
 # 요구사항과 단계별 개발 계획은 PRD.md를 따른다.
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from pico2d import *
 
@@ -15,6 +15,12 @@ FRAME_DELAY = 0.01  # 화면을 한 번 갱신한 뒤 쉬는 시간(초)
 # 스프라이트 설정
 SPRITE_FILE = 'sonic-sprite.png'
 SCALE = 4  # 원본 대비 확대 배율
+
+# 재생 설정
+REPEAT_COUNT = 5  # 동작 하나를 처음부터 끝까지 되풀이해 재생하는 횟수
+
+# 재생 단계: 프레임을 넘기며 재생하는 중(PLAY)이거나, 마지막 프레임에서 멈춰 있는 중(PAUSE)이다.
+PLAY, PAUSE = 'PLAY', 'PAUSE'
 
 # 프레임 영역: pico2d 이미지 좌표계(원점이 왼쪽 아래)의 (left, bottom, width, height)
 Frame = tuple[int, int, int, int]
@@ -76,6 +82,15 @@ MOTIONS: tuple[Motion, ...] = (
 )
 
 
+@dataclass(frozen=True)
+class ViewerState:
+    # 뷰어의 현재 상태: 몇 번째 동작을, 어느 단계에서, 그 단계가 시작되고 몇 초째 보여 주는지
+    # 바꿀 수 없는 값이라 시간이 흐르면 update()가 새 상태를 만들어 돌려준다.
+    motion_index: int = 0
+    phase: str = PLAY
+    elapsed: float = 0.0
+
+
 def resource_path(file_name: str) -> str:
     # 실행 위치와 상관없이 이 파일과 같은 폴더에 있는 리소스 경로를 돌려준다.
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), file_name)
@@ -85,6 +100,34 @@ def frame_index(motion: Motion, elapsed: float) -> int:
     # 재생을 시작하고 elapsed초가 지났을 때 보여 줄 프레임 번호
     # 1/fps초마다 다음 프레임으로 넘어가고, 마지막 프레임 다음에는 첫 프레임으로 돌아간다.
     return int(elapsed * motion.fps) % len(motion.frames)
+
+
+def loop_time(motion: Motion) -> float:
+    # 동작을 처음부터 끝까지 한 번 재생하는 데 걸리는 시간(초)
+    return len(motion.frames) / motion.fps
+
+
+def play_time(motion: Motion) -> float:
+    # 동작을 REPEAT_COUNT번 되풀이해 재생하는 데 걸리는 시간(초)
+    return loop_time(motion) * REPEAT_COUNT
+
+
+def current_frame_index(state: ViewerState) -> int:
+    # 지금 보여 줄 프레임 번호: 재생 중에는 지난 시간으로 정하고, 멈춘 뒤에는 마지막 프레임에 머문다.
+    motion = MOTIONS[state.motion_index]
+    if state.phase == PAUSE:
+        return len(motion.frames) - 1
+    return frame_index(motion, state.elapsed)
+
+
+def update(state: ViewerState, dt: float) -> ViewerState:
+    # dt초가 지난 뒤의 상태를 새로 만들어 돌려준다.
+    # 5회 재생이 끝나면 정지 단계로 넘어가고, 재생 시간을 넘긴 만큼은 정지 단계에서 지난 시간으로 센다.
+    elapsed = state.elapsed + dt
+    limit = play_time(MOTIONS[state.motion_index])
+    if state.phase == PLAY and elapsed >= limit:
+        return replace(state, phase=PAUSE, elapsed=elapsed - limit)
+    return replace(state, elapsed=elapsed)
 
 
 def draw_frame(sheet: Image, frame: Frame, x: float, foot_y: float) -> None:
@@ -110,12 +153,14 @@ def main() -> None:
     open_canvas(CANVAS_W, CANVAS_H)
     try:  # 시트를 읽지 못하는 등 오류가 나도 창은 닫는다.
         sheet = load_image(resource_path(SPRITE_FILE))
-        motion = MOTIONS[0]
-        start_time = get_time()
+        state = ViewerState()
+        last_time = get_time()
         while handle_events():
-            elapsed = get_time() - start_time  # 프레임 번호는 실제로 지난 시간으로 정한다.
+            now = get_time()  # 상태는 실제로 지난 시간만큼 진행한다.
+            state, last_time = update(state, now - last_time), now
+            motion = MOTIONS[state.motion_index]
             clear_canvas()
-            draw_frame(sheet, motion.frames[frame_index(motion, elapsed)], CENTER_X, GROUND_Y)
+            draw_frame(sheet, motion.frames[current_frame_index(state)], CENTER_X, GROUND_Y)
             update_canvas()
             delay(FRAME_DELAY)
     finally:
