@@ -1,0 +1,178 @@
+{
+ "sheet": {
+  "width": 482,
+  "height": 470
+ },
+ "palette": [
+  "#231821",
+  "#efd29a",
+  "#cf9f62",
+  "#93653c",
+  "#c3cdd3",
+  "#83909c",
+  "#4d5665",
+  "#8ff7e3",
+  "#2fa9a0",
+  "#e08a3e",
+  "#9a4b28",
+  "#f5f3e4",
+  "#a5b0b8",
+  "#f7e2b5",
+  "#efc697",
+  "#dfa782",
+  "#fbeccb",
+  "#e3b98a",
+  "#d3a174",
+  "#b57f5c",
+  "#93604a",
+  "#6b4038",
+  "#e6bd82",
+  "#c99662"
+ ],
+ "frames": [
+  {
+   "anim": "Idle",
+   "frame": 1,
+   "x": 8,
+   "y": 8,
+   "width": 62,
+   "height": 100
+  },
+  {
+   "anim": "Idle",
+   "frame": 2,
+   "x": 78,
+   "y": 8,
+   "width": 64,
+   "height": 100
+  },
+  {
+   "anim": "Idle",
+   "frame": 3,
+   "x": 150,
+   "y": 10,
+   "width": 66,
+   "height": 98
+  },
+  {
+   "anim": "Idle",
+   "frame": 4,
+   "x": 224,
+   "y": 10,
+   "width": 64,
+   "height": 98
+  },
+  {
+   "anim": "Walk",
+   "frame": 1,
+   "x": 8,
+   "y": 118,
+   "width": 70,
+   "height": 98
+  },
+  {
+   "anim": "Walk",
+   "frame": 2,
+   "x": 86,
+   "y": 116,
+   "width": 74,
+   "height": 100
+  },
+  {
+   "anim": "Walk",
+   "frame": 3,
+   "x": 168,
+   "y": 116,
+   "width": 72,
+   "height": 100
+  },
+  {
+   "anim": "Walk",
+   "frame": 4,
+   "x": 248,
+   "y": 118,
+   "width": 72,
+   "height": 98
+  },
+  {
+   "anim": "Walk",
+   "frame": 5,
+   "x": 328,
+   "y": 116,
+   "width": 68,
+   "height": 100
+  },
+  {
+   "anim": "Walk",
+   "frame": 6,
+   "x": 404,
+   "y": 116,
+   "width": 70,
+   "height": 100
+  },
+  {
+   "anim": "Attack",
+   "frame": 1,
+   "x": 8,
+   "y": 236,
+   "width": 68,
+   "height": 98
+  },
+  {
+   "anim": "Attack",
+   "frame": 2,
+   "x": 84,
+   "y": 224,
+   "width": 56,
+   "height": 110
+  },
+  {
+   "anim": "Attack",
+   "frame": 3,
+   "x": 148,
+   "y": 230,
+   "width": 96,
+   "height": 104
+  },
+  {
+   "anim": "Attack",
+   "frame": 4,
+   "x": 252,
+   "y": 234,
+   "width": 84,
+   "height": 100
+  },
+  {
+   "anim": "Attack",
+   "frame": 5,
+   "x": 344,
+   "y": 234,
+   "width": 80,
+   "height": 100
+  },
+  {
+   "anim": "Jump",
+   "frame": 1,
+   "x": 8,
+   "y": 372,
+   "width": 72,
+   "height": 90
+  },
+  {
+   "anim": "Jump",
+   "frame": 2,
+   "x": 88,
+   "y": 342,
+   "width": 44,
+   "height": 120
+  },
+  {
+   "anim": "Jump",
+   "frame": 3,
+   "x": 140,
+   "y": 368,
+   "width": 94,
+   "height": 94
+  }
+ ]
+}

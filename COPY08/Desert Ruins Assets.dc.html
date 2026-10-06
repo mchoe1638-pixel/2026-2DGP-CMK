@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><style>body{margin:0;background:#f4efe6;color:#231821;font-family:Helvetica,Arial,sans-serif}a{color:#9a4b28}a:hover{color:#231821}</style></helmet>
+<div style="max-width:1000px;margin:0 auto;padding:32px 20px;display:flex;flex-direction:column;gap:28px">
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <h1 style="margin:0;font-size:26px">사막 폐허 — 에셋 2종</h1>
+    <div style="font-size:14px;color:#5a4a44">24색 팔레트 · 2x 픽셀 스케일 · 모래 망토 소형 로봇 전사</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <h2 style="margin:0;font-size:18px">미리보기 (캐릭터 3배)</h2>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <sc-for list="{{ animButtons }}" as="b" hint-placeholder-count="4">
+          <button onClick="{{ b.onClick }}" style="font:inherit;font-size:13px;padding:6px 12px;border:1px solid #231821;border-radius:4px;cursor:pointer;background:{{ b.bg }};color:{{ b.fg }}">{{ b.name }}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="position:relative;width:100%;max-width:800px;aspect-ratio:4/3;background:url(background.png) center/100% 100%;image-rendering:pixelated;overflow:hidden;border:1px solid #231821">
+      <div style="position:absolute;left:50%;bottom:20%;width:0;height:0">
+        <div style="position:absolute;bottom:0;left:{{ spr.left }};width:{{ spr.w }};height:{{ spr.h }};background-image:url(character_sheet.png);background-size:{{ spr.bs }};background-position:{{ spr.bp }};image-rendering:pixelated"></div>
+      </div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <h2 style="margin:0;font-size:18px">background.png</h2>
+      <div style="font-size:13px;color:#5a4a44">800 × 600 · 지면 상단 y = 480 (하단 120px)</div>
+      <img src="background.png" style="width:100%;image-rendering:pixelated;border:1px solid #231821"></img>
+      <a href="background.png" download="background.png" style="font-size:14px">다운로드</a>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <h2 style="margin:0;font-size:18px">character_sheet.png</h2>
+      <div style="font-size:13px;color:#5a4a44">482 × 470 · 투명 PNG · 프레임 간격 8px</div>
+      <img src="character_sheet.png" style="width:100%;image-rendering:pixelated;border:1px solid #231821;background:repeating-conic-gradient(#e6ddd0 0 25%,#f7f2ea 0 50%) 0 0/16px 16px"></img>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:14px">
+        <a href="character_sheet.png" download="character_sheet.png">시트 다운로드</a>
+        <a href="character_frames.py" download="character_frames.py">character_frames.py</a>
+        <a href="frames.json" download="frames.json">frames.json</a>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <h2 style="margin:0;font-size:18px">프레임 좌표표</h2>
+    <div style="font-size:13px;color:#5a4a44">시트 크기 482 × 470 px · 왼쪽 위 (0,0) 기준 · 캐릭터를 딱 감싸는 사각형 · 각 행의 프레임 하단(y+height)이 같은 발 기준선</div>
+    <table style="border-collapse:collapse;font-family:ui-monospace,Menlo,monospace;font-size:13px;width:100%;max-width:560px">
+      <tr style="background:#231821;color:#f4efe6;text-align:left">
+        <th style="padding:6px 10px">애니메이션</th><th style="padding:6px 10px">프레임</th><th style="padding:6px 10px">x</th><th style="padding:6px 10px">y</th><th style="padding:6px 10px">width</th><th style="padding:6px 10px">height</th>
+      </tr>
+      <sc-for list="{{ frames }}" as="f" hint-placeholder-count="18">
+        <tr style="border-bottom:1px solid #d9cfc2">
+          <td style="padding:5px 10px">{{ f.anim }}</td><td style="padding:5px 10px">{{ f.frame }}</td><td style="padding:5px 10px">{{ f.x }}</td><td style="padding:5px 10px">{{ f.y }}</td><td style="padding:5px 10px">{{ f.w }}</td><td style="padding:5px 10px">{{ f.h }}</td>
+        </tr>
+      </sc-for>
+    </table>
+    <div style="font-size:13px;color:#5a4a44;max-width:640px;text-wrap:pretty">pico2d의 clip_draw는 왼쪽 아래가 원점이므로 bottom = 470 − y − height 로 변환해서 쓰세요. character_frames.py에 변환 함수가 들어 있습니다.</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const RAW=`Idle 1 8 8 62 100
+Idle 2 78 8 64 100
+Idle 3 150 10 66 98
+Idle 4 224 10 64 98
+Walk 1 8 118 70 98
+Walk 2 86 116 74 100
+Walk 3 168 116 72 100
+Walk 4 248 118 72 98
+Walk 5 328 116 68 100
+Walk 6 404 116 70 100
+Attack 1 8 236 68 98
+Attack 2 84 224 56 110
+Attack 3 148 230 96 104
+Attack 4 252 234 84 100
+Attack 5 344 234 80 100
+Jump 1 8 372 72 90
+Jump 2 88 342 44 120
+Jump 3 140 368 94 94`;
+const FR=RAW.split('\n').map(l=>{const [anim,frame,x,y,w,h]=l.split(' ');return{anim,frame:+frame,x:+x,y:+y,w:+w,h:+h};});
+const SPEED={Idle:220,Walk:110,Attack:100,Jump:260};
+class Component extends DCLogic{
+  state={anim:'Walk',i:0,scale:3};
+  componentDidMount(){this.tick();this.ro=()=>this.forceUpdate();window.addEventListener('resize',this.ro);}
+  componentWillUnmount(){clearTimeout(this.t);window.removeEventListener('resize',this.ro);}
+  tick(){this.t=setTimeout(()=>{const n=FR.filter(f=>f.anim===this.state.anim).length;this.setState(s=>({i:(s.i+1)%n}));this.tick();},SPEED[this.state.anim]);}
+  renderVals(){
+    const list=FR.filter(f=>f.anim===this.state.anim),f=list[this.state.i%list.length];
+    const k=3*Math.min(1,(Math.min(window.innerWidth,1000)-40)/800);
+    return{frames:FR,
+      animButtons:['Idle','Walk','Attack','Jump'].map(name=>({name,bg:name===this.state.anim?'#231821':'transparent',fg:name===this.state.anim?'#f4efe6':'#231821',onClick:()=>this.setState({anim:name,i:0})})),
+      spr:{left:(-32*k)+'px',w:f.w*k+'px',h:f.h*k+'px',bs:(482*k)+'px '+(470*k)+'px',bp:(-f.x*k)+'px '+(-f.y*k)+'px'}};
+  }
+}
+</script>
+</body>
+</html>
