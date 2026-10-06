@@ -1,6 +1,7 @@
 # sonic_animation_viewer.py 테스트
 # LEC09 폴더에서 `python -m unittest -v`로 실행한다.
-# pico2d 함수는 가짜(mock)로 바꿔 창을 열지 않고 확인한다.
+# pico2d 함수는 가짜(mock)로 바꿔 창을 열지 않고 확인한다. (RealWindowTest만 실제 창을 잠깐 열어 확인한다)
+import ctypes
 import dataclasses
 import itertools
 import os
@@ -9,12 +10,15 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
+import pico2d.pico2d as pico2d_core  # 실제 창 테스트: open_canvas()가 만든 창(window)과 렌더러(renderer)를 쓴다.
+import sdl2
+
 import sonic_animation_viewer as viewer
 
 try:
-    from PIL import Image as PILImage
+    from PIL import Image as PILImage, ImageChops
 except ImportError:  # Pillow가 없으면 픽셀 검사 테스트만 건너뛴다.
-    PILImage = None
+    PILImage = ImageChops = None
 
 PRD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'PRD.md')
 SHEET_SIZE = (399, 525)  # sonic-sprite.png 크기 (PRD.md 2절)
@@ -126,6 +130,79 @@ def run_main(events_per_call, times=None):
             fakes['get_time'].side_effect = times
         viewer.main()
     return fakes
+
+
+STATUS_AREA_HEIGHT = 40  # 상태 표시가 있는 화면 위쪽 띠의 높이(px) (PRD.md 6.4절)
+FRAMES_BEFORE_ESCAPE = 3  # 실제 창 테스트에서 화면을 이만큼 내보낸 뒤 ESC 키를 누른다.
+FRAME_LIMIT = 300  # ESC 키로 끝나지 않아도 테스트가 멈추지 않게, 이만큼 내보내면 오류를 내 루프를 끊는다.
+
+
+def real_window_size():
+    # open_canvas()가 실제로 연 창의 크기를 SDL에 직접 묻는다.
+    width, height = ctypes.c_int(), ctypes.c_int()
+    sdl2.SDL_GetWindowSize(pico2d_core.window, ctypes.byref(width), ctypes.byref(height))
+    return width.value, height.value
+
+
+def read_screen():
+    # 지금까지 그린 화면(아직 내보내기 전)을 맨 위 줄부터 픽셀마다 RGBA 4바이트로 읽는다.
+    width, height = viewer.CANVAS_W, viewer.CANVAS_H
+    pixels = (ctypes.c_ubyte * (width * height * 4))()
+    if sdl2.SDL_RenderReadPixels(pico2d_core.renderer, None, sdl2.SDL_PIXELFORMAT_ABGR8888, pixels, width * 4):
+        raise RuntimeError(sdl2.SDL_GetError())
+    return bytes(pixels)
+
+
+def push_escape_key():
+    # 사용자가 ESC 키를 누른 것과 같은 키 입력 이벤트를 SDL 이벤트 큐에 넣는다. pico2d의 get_events()가 이 큐에서 읽는다.
+    event = sdl2.SDL_Event()
+    event.type = sdl2.SDL_KEYDOWN
+    event.key.keysym.sym = sdl2.SDLK_ESCAPE
+    if sdl2.SDL_PushEvent(ctypes.byref(event)) != 1:
+        raise RuntimeError(sdl2.SDL_GetError())
+
+
+def run_real_main():
+    # 가짜 함수 없이 실제 pico2d 창을 열어 main()을 실행하고, 그동안 본 것을 모아 돌려준다.
+    # 화면을 FRAMES_BEFORE_ESCAPE번 내보낸 뒤 ESC 키를 누른다.
+    # 첫 화면은 지운 직후(배경)와 내보내기 직전(그린 뒤)에 읽어 두어, 둘을 비교해 그린 위치를 찾을 수 있게 한다.
+    seen = SimpleNamespace(presented=0, window_size=None, background=None, first_screen=None)
+    real_clear_canvas, real_update_canvas = viewer.clear_canvas, viewer.update_canvas
+
+    def clear_canvas():
+        real_clear_canvas()
+        if seen.presented == 0:
+            seen.background = read_screen()
+
+    def update_canvas():
+        if seen.presented == 0:
+            seen.window_size, seen.first_screen = real_window_size(), read_screen()
+        real_update_canvas()
+        seen.presented += 1
+        if seen.presented == FRAMES_BEFORE_ESCAPE:
+            push_escape_key()
+        if seen.presented >= FRAME_LIMIT:
+            raise RuntimeError('ESC 키를 눌렀는데도 메인 루프가 끝나지 않았다.')
+
+    with mock.patch.multiple(viewer, clear_canvas=clear_canvas, update_canvas=update_canvas), \
+            mock.patch.object(viewer, 'close_canvas', wraps=viewer.close_canvas) as close_canvas:
+        viewer.main()
+    seen.close_calls = close_canvas.call_count
+    seen.video_still_on = bool(sdl2.SDL_WasInit(sdl2.SDL_INIT_VIDEO))  # 창을 닫고 SDL을 끝냈으면 False
+    return seen
+
+
+def drawn_box(seen, top, bottom):
+    # 첫 화면의 top ~ bottom 행에 그려진 것을 모두 감싸는 상자 (왼쪽, 위, 오른쪽, 아래)를 화면 좌표(맨 위 줄이 0행)로 돌려준다.
+    # 지운 직후의 화면(배경)과 색이 다른 픽셀을 그려진 것으로 본다. 그려진 것이 없으면 None이다.
+    size = (viewer.CANVAS_W, viewer.CANVAS_H)
+    background, screen = (PILImage.frombuffer('RGBA', size, pixels, 'raw', 'RGBA', 0, 1).convert('RGB')
+                          for pixels in (seen.background, seen.first_screen))
+    box = ImageChops.difference(background, screen).crop((0, top, size[0], bottom)).getbbox()
+    if box is None:
+        return None
+    left, upper, right, lower = box
+    return left, upper + top, right, lower + top
 
 
 class HandleEventsTest(unittest.TestCase):
@@ -706,6 +783,45 @@ class TimeSimulationTest(unittest.TestCase):
                     self.assertAlmostEqual(top, motion.jump_height, delta=0.01)
                 for landing in landings:
                     self.assertAlmostEqual(landing, 0, delta=0.01)
+
+
+class RealWindowTest(unittest.TestCase):
+    # PRD.md 8.2절 구현 단계 17: 가짜 함수 없이 실제 pico2d 창을 열어 main()을 한 번 실행하고 확인한다.
+    # 화면을 3번 내보낸 뒤 실제 ESC 키 입력 이벤트를 넣으므로 창은 1초도 안 되어 닫힌다.
+    @classmethod
+    def setUpClass(cls):
+        cls.seen = run_real_main()
+
+    def test_opens_1200x600_window(self):
+        self.assertEqual(self.seen.window_size, (1200, 600))
+
+    def test_escape_key_ends_loop_and_closes_window(self):
+        # ESC 키를 누른 뒤에는 화면을 더 그리지 않고 루프를 끝내며, 창을 닫아 SDL 화면 기능도 꺼진다.
+        self.assertEqual(self.seen.presented, FRAMES_BEFORE_ESCAPE)
+        self.assertEqual(self.seen.close_calls, 1)
+        self.assertFalse(self.seen.video_still_on)
+
+    @unittest.skipIf(PILImage is None, 'Pillow가 없어 픽셀 검사를 건너뜀')
+    def test_first_screen_draws_idle_frame_4x_at_center_on_ground(self):
+        # 첫 화면에는 대기 1번 프레임(29x39)이 4배 크기(116x156)로 가로 중심 x = 600, 발 y = 150에 그려진다.
+        box = drawn_box(self.seen, STATUS_AREA_HEIGHT, viewer.CANVAS_H)
+        self.assertIsNotNone(box)
+        left, top, right, bottom = box
+        self.assertEqual((right - left, bottom - top), (116, 156))
+        self.assertEqual((left + right) / 2, 600)
+        self.assertEqual(viewer.CANVAS_H - bottom, 150)  # 화면 좌표(맨 위 줄이 0행) -> pico2d 좌표(맨 아래가 0)
+
+    @unittest.skipIf(PILImage is None, 'Pillow가 없어 픽셀 검사를 건너뜀')
+    def test_first_screen_draws_status_text_at_top_left(self):
+        # 상태 글자는 x = 10 바로 오른쪽(첫 글자의 왼쪽 여백만큼)부터 시작하고, 세로 중심은 y = 580 근처다.
+        # 글자가 위쪽 띠의 위아래 경계나 화면 오른쪽 끝에 닿지 않아야 잘리지 않고 다 보인다.
+        box = drawn_box(self.seen, 0, STATUS_AREA_HEIGHT)
+        self.assertIsNotNone(box)
+        left, top, right, bottom = box
+        self.assertTrue(viewer.HUD_X <= left <= viewer.HUD_X + 10, left)
+        self.assertAlmostEqual(viewer.CANVAS_H - (top + bottom) / 2, viewer.HUD_Y, delta=4)
+        self.assertTrue(0 < top and bottom < STATUS_AREA_HEIGHT, (top, bottom))
+        self.assertLess(right, viewer.CANVAS_W)
 
 
 class MotionDataTest(unittest.TestCase):
