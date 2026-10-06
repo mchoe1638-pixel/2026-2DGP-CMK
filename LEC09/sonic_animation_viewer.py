@@ -16,6 +16,12 @@ FRAME_DELAY = 0.01  # 화면을 한 번 갱신한 뒤 쉬는 시간(초)
 SPRITE_FILE = 'sonic-sprite.png'
 SCALE = 4  # 원본 대비 확대 배율
 
+# 상태 표시 설정
+FONT_FILE = 'ConsolaMalgun.ttf'  # pico2d에 함께 들어 있는 한글 글꼴
+FONT_SIZE = 20
+HUD_X, HUD_Y = 10, 580  # 상태 글자의 왼쪽 끝과 세로 중심: 화면 왼쪽 위
+HUD_COLOR = (0, 0, 0)
+
 # 재생 설정
 REPEAT_COUNT = 5  # 동작 하나를 처음부터 끝까지 되풀이해 재생하는 횟수
 PAUSE_TIME = 1.0  # 5회 재생을 마친 뒤 마지막 프레임에 멈춰 있는 시간(초)
@@ -97,6 +103,11 @@ def resource_path(file_name: str) -> str:
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), file_name)
 
 
+def font_path() -> str:
+    # pico2d 패키지의 data 폴더에 있는 글꼴 경로 (PICO2D_DATA_PATH는 pico2d를 불러올 때 정해진다)
+    return os.path.join(os.environ['PICO2D_DATA_PATH'], FONT_FILE)
+
+
 def frame_index(motion: Motion, elapsed: float) -> int:
     # 재생을 시작하고 elapsed초가 지났을 때 보여 줄 프레임 번호
     # 1/fps초마다 다음 프레임으로 넘어가고, 마지막 프레임 다음에는 첫 프레임으로 돌아간다.
@@ -119,6 +130,26 @@ def current_frame_index(state: ViewerState) -> int:
     if state.phase == PAUSE:
         return len(motion.frames) - 1
     return frame_index(motion, state.elapsed)
+
+
+def repeat_number(state: ViewerState) -> int:
+    # 지금 몇 번째 반복을 재생하는지(1 ~ REPEAT_COUNT). 정지 중에는 마지막 반복을 마친 상태다.
+    if state.phase == PAUSE:
+        return REPEAT_COUNT
+    return min(int(state.elapsed / loop_time(MOTIONS[state.motion_index])) + 1, REPEAT_COUNT)
+
+
+def hud_text(state: ViewerState) -> str:
+    # 화면 왼쪽 위에 띄울 상태 글자: 동작 순번·이름, 반복 횟수, 프레임 번호, 재생 중 또는 정지 경과 시간
+    # 정지 시간은 0.1초 단위로 버려서 정지가 끝나기 전에 1.0초로 보이지 않게 한다.
+    motion = MOTIONS[state.motion_index]
+    if state.phase == PAUSE:
+        status = f'정지 {int(state.elapsed * 10) / 10:.1f}/{PAUSE_TIME:.1f}초'
+    else:
+        status = '재생 중'
+    return (f'[{state.motion_index + 1}/{len(MOTIONS)}] {motion.name} | '
+            f'반복 {repeat_number(state)}/{REPEAT_COUNT} | '
+            f'프레임 {current_frame_index(state) + 1}/{len(motion.frames)} | {status}')
 
 
 def phase_time(state: ViewerState) -> float:
@@ -154,6 +185,15 @@ def draw_frame(sheet: Image, frame: Frame, x: float, foot_y: float) -> None:
     sheet.clip_draw(left, bottom, width, height, x, foot_y + draw_h / 2, draw_w, draw_h)
 
 
+def draw_viewer(sheet: Image, font: Font, state: ViewerState) -> None:
+    # 화면을 지우고 지금 상태의 프레임과 상태 글자를 그린 뒤 화면에 내보낸다.
+    motion = MOTIONS[state.motion_index]
+    clear_canvas()
+    draw_frame(sheet, motion.frames[current_frame_index(state)], CENTER_X, GROUND_Y)
+    font.draw(HUD_X, HUD_Y, hud_text(state), HUD_COLOR)
+    update_canvas()
+
+
 def handle_events() -> bool:
     # 창 닫기나 ESC 키 입력이 있으면 False를 돌려줘 메인 루프를 끝낸다.
     for event in get_events():
@@ -166,17 +206,15 @@ def handle_events() -> bool:
 
 def main() -> None:
     open_canvas(CANVAS_W, CANVAS_H)
-    try:  # 시트를 읽지 못하는 등 오류가 나도 창은 닫는다.
+    try:  # 시트나 글꼴을 읽지 못하는 등 오류가 나도 창은 닫는다.
         sheet = load_image(resource_path(SPRITE_FILE))
+        font = load_font(font_path(), FONT_SIZE)
         state = ViewerState()
         last_time = get_time()
         while handle_events():
             now = get_time()  # 상태는 실제로 지난 시간만큼 진행한다.
             state, last_time = update(state, now - last_time), now
-            motion = MOTIONS[state.motion_index]
-            clear_canvas()
-            draw_frame(sheet, motion.frames[current_frame_index(state)], CENTER_X, GROUND_Y)
-            update_canvas()
+            draw_viewer(sheet, font, state)
             delay(FRAME_DELAY)
     finally:
         close_canvas()

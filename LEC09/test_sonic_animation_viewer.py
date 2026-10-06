@@ -77,7 +77,7 @@ ESC_EVENT = key_event(viewer.SDLK_ESCAPE)
 
 
 PICO2D_FUNCTIONS = ('open_canvas', 'close_canvas', 'clear_canvas', 'update_canvas', 'delay',
-                    'get_events', 'get_time', 'load_image')
+                    'get_events', 'get_time', 'load_image', 'load_font')
 
 
 def fake_pico2d():
@@ -181,6 +181,27 @@ class MainLoopTest(unittest.TestCase):
             mock.call(1, 447, 29, 39, 600, 228, 116, 156),
         ])
 
+    def test_loads_hangul_font_bundled_with_pico2d(self):
+        fakes = run_main([[ESC_EVENT]])
+        fakes['load_font'].assert_called_once_with(viewer.font_path(), 20)
+
+    def test_draws_status_text_at_top_left_every_frame(self):
+        # 2.6초: 대기 3회째 재생 중 5번째 프레임, 5.96초: 5회 재생(5.5초)을 마치고 0.46초째 정지 중
+        fakes = run_main([[], [], [ESC_EVENT]], times=[0.0, 2.6, 5.96])
+        font = fakes['load_font'].return_value
+        self.assertEqual(font.draw.call_args_list, [
+            mock.call(10, 580, '[1/10] 대기 | 반복 3/5 | 프레임 5/11 | 재생 중', (0, 0, 0)),
+            mock.call(10, 580, '[1/10] 대기 | 반복 5/5 | 프레임 11/11 | 정지 0.4/1.0초', (0, 0, 0)),
+        ])
+
+    def test_closes_canvas_when_font_cannot_be_loaded(self):
+        with mock.patch.multiple(viewer, **fake_pico2d()) as fakes:
+            fakes['get_events'].side_effect = [[ESC_EVENT]]
+            fakes['load_font'].side_effect = IOError
+            with self.assertRaises(IOError):
+                viewer.main()
+        fakes['close_canvas'].assert_called_once_with()
+
     def test_closes_canvas_when_sheet_cannot_be_loaded(self):
         with mock.patch.multiple(viewer, **fake_pico2d()) as fakes:
             fakes['get_events'].side_effect = [[ESC_EVENT]]
@@ -195,6 +216,13 @@ class SpriteSheetTest(unittest.TestCase):
         path = viewer.resource_path(viewer.SPRITE_FILE)
         script_dir = os.path.dirname(os.path.abspath(viewer.__file__))
         self.assertEqual(path, os.path.join(script_dir, 'sonic-sprite.png'))
+        self.assertTrue(os.path.isfile(path))
+
+
+class FontTest(unittest.TestCase):
+    def test_font_is_hangul_font_in_pico2d_data_folder(self):
+        path = viewer.font_path()
+        self.assertEqual(path, os.path.join(os.environ['PICO2D_DATA_PATH'], 'ConsolaMalgun.ttf'))
         self.assertTrue(os.path.isfile(path))
 
 
@@ -341,6 +369,41 @@ class CycleTest(unittest.TestCase):
                 start = next(t for t, s in history if s.motion_index == index) - 0.01
                 self.assertAlmostEqual(start, expected_start, delta=0.0101)
             expected_start += viewer.play_time(motion) + viewer.PAUSE_TIME
+
+
+class HudTest(unittest.TestCase):
+    def check(self, cases):
+        for state, expected in cases:
+            with self.subTest(state=state):
+                self.assertEqual(viewer.hud_text(state), expected)
+
+    def test_shows_motion_repeat_and_frame_while_playing(self):
+        # 걷기 2.6초째: 1회 1초라 3회째, 12fps라 31번째 프레임 = 3회째의 8번째 프레임
+        self.check([
+            (viewer.ViewerState(), '[1/10] 대기 | 반복 1/5 | 프레임 1/11 | 재생 중'),
+            (viewer.ViewerState(motion_index=1, elapsed=2.6), '[2/10] 걷기 | 반복 3/5 | 프레임 8/12 | 재생 중'),
+            (viewer.ViewerState(motion_index=9, elapsed=4.99), '[10/10] 포즈 | 반복 5/5 | 프레임 4/4 | 재생 중'),
+        ])
+
+    def test_shows_pause_elapsed_time_while_paused(self):
+        # 정지 시간은 0.1초 단위로 버림해 정지가 끝나기 전에 1.0초로 보이지 않게 한다.
+        paused = viewer.ViewerState(motion_index=1, phase=viewer.PAUSE)
+        self.check([
+            (paused, '[2/10] 걷기 | 반복 5/5 | 프레임 12/12 | 정지 0.0/1.0초'),
+            (dataclasses.replace(paused, elapsed=0.46), '[2/10] 걷기 | 반복 5/5 | 프레임 12/12 | 정지 0.4/1.0초'),
+            (dataclasses.replace(paused, elapsed=0.96), '[2/10] 걷기 | 반복 5/5 | 프레임 12/12 | 정지 0.9/1.0초'),
+        ])
+
+    def test_repeat_number_counts_one_to_five_once_per_loop(self):
+        # k번째 반복은 (k - 1) x 1회 재생 시간에 시작하고, 정지 중에는 5/5로 남는다.
+        for index, motion in enumerate(viewer.MOTIONS):
+            with self.subTest(motion=motion.name):
+                history = simulate(viewer.play_time(motion) + 0.5, viewer.ViewerState(motion_index=index))
+                repeats = [viewer.repeat_number(s) for _, s in history]
+                self.assertEqual(collapse(repeats), [1, 2, 3, 4, 5])
+                for k in range(2, 6):
+                    start = next(t for t, s in history if viewer.repeat_number(s) == k)
+                    self.assertAlmostEqual(start, (k - 1) * viewer.loop_time(motion), delta=0.0101)
 
 
 class MotionDataTest(unittest.TestCase):
