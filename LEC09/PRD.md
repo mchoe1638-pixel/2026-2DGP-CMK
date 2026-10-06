@@ -29,7 +29,7 @@ pico2d 프로그램을 만든다. 각 동작은 5회 반복한 뒤 1초 정지�
 |------|-----|
 | 언어 | Python 3.11 |
 | 라이브러리 | pico2d 1.5.1 |
-| 캔버스 | 800×600 |
+| 캔버스 | 1200×600 |
 | 실행 파일 | `LEC09/sonic_animation_viewer.py` (단일 파일) |
 | 리소스 | `LEC09/sonic-sprite.png` (399×525, RGBA, 투명 배경) — 실행 파일 위치를 기준으로 읽는다 |
 | 실행 방법 | `LEC09` 폴더에서 `python sonic_animation_viewer.py` |
