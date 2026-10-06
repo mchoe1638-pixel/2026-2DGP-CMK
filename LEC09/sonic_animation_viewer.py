@@ -130,10 +130,10 @@ def phase_time(state: ViewerState) -> float:
 
 def next_phase(state: ViewerState) -> ViewerState:
     # 지금 단계가 끝났을 때 이어지는 단계의 시작 상태
-    # 5회 재생이 끝나면 정지하고, 정지가 끝나면 같은 동작을 처음부터 다시 재생한다.
+    # 5회 재생이 끝나면 정지하고, 정지가 끝나면 다음 동작을 처음부터 재생한다. (마지막 동작 다음은 첫 동작)
     if state.phase == PLAY:
         return replace(state, phase=PAUSE, elapsed=0.0)
-    return replace(state, phase=PLAY, elapsed=0.0)
+    return ViewerState(motion_index=(state.motion_index + 1) % len(MOTIONS))
 
 
 def update(state: ViewerState, dt: float) -> ViewerState:

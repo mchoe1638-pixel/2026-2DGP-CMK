@@ -162,6 +162,15 @@ class MainLoopTest(unittest.TestCase):
         self.assertEqual(fakes['update_canvas'].call_count, 1)
         fakes['close_canvas'].assert_called_once_with()
 
+    def test_draws_first_walk_frame_after_idle_pause(self):
+        # 대기는 5.5초 재생 + 1초 정지: 6.45초에는 대기 마지막 프레임, 6.55초에는 걷기 첫 프레임을 그린다.
+        fakes = run_main([[], [], [ESC_EVENT]], times=[0.0, 6.45, 6.55])
+        sheet = fakes['load_image'].return_value
+        self.assertEqual(sheet.clip_draw.call_args_list, [
+            mock.call(302, 448, 29, 26, 600, 202, 116, 104),
+            mock.call(8, 408, 26, 37, 600, 224, 104, 148),
+        ])
+
     def test_draws_frame_for_time_elapsed_since_start(self):
         # 대기(10fps)를 시작 시각 10.0초 기준으로 0.05초, 0.35초, 1.15초 뒤에 그리면 0, 3, 0번 프레임이다.
         fakes = run_main([[], [], [], [ESC_EVENT]], times=[10.0, 10.05, 10.35, 11.15])
@@ -297,6 +306,41 @@ class PauseTest(unittest.TestCase):
         state = viewer.update(viewer.ViewerState(), 6.8)
         self.assertEqual(state.phase, viewer.PLAY)
         self.assertAlmostEqual(state.elapsed, 0.3)
+
+
+class CycleTest(unittest.TestCase):
+    def test_switches_to_next_motion_after_pause(self):
+        # 정지 0.99초째에서 0.02초가 지나면 다음 동작을 처음부터 0.01초째 재생한다. (10번 뒤에는 1번)
+        for index in range(len(viewer.MOTIONS)):
+            with self.subTest(motion=viewer.MOTIONS[index].name):
+                pausing = viewer.ViewerState(motion_index=index, phase=viewer.PAUSE, elapsed=0.99)
+                state = viewer.update(pausing, 0.02)
+                self.assertEqual((state.motion_index, state.phase), ((index + 1) % 10, viewer.PLAY))
+                self.assertAlmostEqual(state.elapsed, 0.01)
+                self.assertEqual(viewer.current_frame_index(state), 0)
+
+    def test_one_cycle_takes_44_75_seconds(self):
+        # PRD.md 5.3절: 재생 34.75초 + 정지 1초 x 10 = 44.75초
+        total = sum(viewer.play_time(motion) + viewer.PAUSE_TIME for motion in viewer.MOTIONS)
+        self.assertAlmostEqual(total, 44.75)
+        self.assertIn('**44.75초**', read_prd())
+
+    def test_plays_all_motions_in_order_and_returns_to_first(self):
+        # 0.01초 간격으로 44.75초 + 0.5초를 흘려보내면 1번 -> 10번 동작을 차례로 재생한 뒤 1번으로 돌아온다.
+        history = simulate(44.75 + 0.5)
+        self.assertEqual(collapse([s.motion_index for _, s in history]), list(range(10)) + [0])
+        switches = [t for (t, s), (_, before) in zip(history[1:], history) if s.motion_index != before.motion_index]
+        self.assertAlmostEqual(switches[-1], 44.75, delta=0.0101)  # 10번 -> 1번으로 돌아오는 시각
+
+    def test_each_motion_starts_when_previous_pause_ends(self):
+        # 동작 k의 시작 시각 = 앞선 동작들의 (5회 재생 시간 + 정지 1초)의 합
+        history = simulate(44.75)
+        expected_start = 0.0
+        for index, motion in enumerate(viewer.MOTIONS):
+            with self.subTest(motion=motion.name):
+                start = next(t for t, s in history if s.motion_index == index) - 0.01
+                self.assertAlmostEqual(start, expected_start, delta=0.0101)
+            expected_start += viewer.play_time(motion) + viewer.PAUSE_TIME
 
 
 class MotionDataTest(unittest.TestCase):
