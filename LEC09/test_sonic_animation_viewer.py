@@ -18,9 +18,9 @@ except ImportError:  # Pillow가 없으면 픽셀 검사 테스트만 건너뛴�
 PRD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'PRD.md')
 SHEET_SIZE = (399, 525)  # sonic-sprite.png 크기 (PRD.md 2절)
 
-# 지금까지 등록한 동작과 프레임 수 (PRD.md 8.2절 3~6단계에서 늘어난다)
+# 재생 순서대로 등록할 동작과 프레임 수 (PRD.md 5.3절: 10종 76프레임)
 EXPECTED_FRAME_COUNTS = {'대기': 11, '걷기': 12, '발차기': 6, '회전 진입': 9, '스핀 점프': 6,
-                         '질주': 6, '최고속 질주': 6}
+                         '질주': 6, '최고속 질주': 6, '공중 회전': 8, '정면 달리기': 8, '포즈': 4}
 
 
 def read_prd() -> str:
@@ -151,13 +151,16 @@ class MotionDataTest(unittest.TestCase):
         return [(motion.name, frame) for motion in viewer.MOTIONS for frame in motion.frames]
 
     def test_registered_motions_and_frame_counts(self):
-        counts = {motion.name: len(motion.frames) for motion in viewer.MOTIONS}
-        self.assertEqual(counts, EXPECTED_FRAME_COUNTS)
-        self.assertEqual(len(self.all_frames()), sum(EXPECTED_FRAME_COUNTS.values()))
+        counts = [(motion.name, len(motion.frames)) for motion in viewer.MOTIONS]
+        self.assertEqual(counts, list(EXPECTED_FRAME_COUNTS.items()))
+
+    def test_all_10_motions_and_76_frames_are_registered(self):
+        self.assertEqual(len(viewer.MOTIONS), 10)
+        self.assertEqual(len(self.all_frames()), 76)
 
     def test_frames_match_prd_section_5_4_in_order(self):
         registered = [(motion.name, list(motion.frames)) for motion in viewer.MOTIONS]
-        self.assertEqual(registered, prd_frames()[:len(registered)])
+        self.assertEqual(registered, prd_frames())
 
     def test_fps_match_prd_section_5_3(self):
         table = prd_fps()
