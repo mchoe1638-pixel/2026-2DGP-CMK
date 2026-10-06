@@ -19,7 +19,8 @@ PRD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'PRD.md')
 SHEET_SIZE = (399, 525)  # sonic-sprite.png 크기 (PRD.md 2절)
 
 # 지금까지 등록한 동작과 프레임 수 (PRD.md 8.2절 3~6단계에서 늘어난다)
-EXPECTED_FRAME_COUNTS = {'대기': 11, '걷기': 12, '발차기': 6}
+EXPECTED_FRAME_COUNTS = {'대기': 11, '걷기': 12, '발차기': 6, '회전 진입': 9, '스핀 점프': 6,
+                         '질주': 6, '최고속 질주': 6}
 
 
 def read_prd() -> str:
