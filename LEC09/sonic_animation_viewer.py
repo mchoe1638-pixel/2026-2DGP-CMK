@@ -38,16 +38,17 @@ Frame = tuple[int, int, int, int]
 
 @dataclass(frozen=True)
 class Motion:
-    # 동작 하나: 이름, 재생 속도(초당 프레임 수), 재생 순서대로 늘어선 프레임 영역, 가로 이동 속도(px/초)
-    # 이동 속도가 0인 동작은 화면 가운데에 서서 재생한다.
+    # 동작 하나: 이름, 재생 속도(초당 프레임 수), 재생 순서대로 늘어선 프레임 영역, 가로 이동 속도(px/초), 점프 높이(px)
+    # 이동 속도가 0인 동작은 화면 가운데에 서서 재생하고, 점프 높이가 0인 동작은 발이 기준선을 떠나지 않는다.
     name: str
     fps: float
     frames: tuple[Frame, ...]
     speed: float = 0
+    jump_height: float = 0
 
 
 # 재생 순서대로 늘어선 동작 목록
-# 시트를 분석해 얻은 프레임 좌표(PRD.md 5.4절)와 동작별 fps(5.3절), 이동 속도(6.1절)를 그대로 옮겼다.
+# 시트를 분석해 얻은 프레임 좌표(PRD.md 5.4절)와 동작별 fps(5.3절), 이동 속도와 점프 높이(6.1절)를 그대로 옮겼다.
 MOTIONS: tuple[Motion, ...] = (
     Motion('대기', 10, (
         (1, 447, 29, 39), (31, 447, 26, 38), (58, 447, 28, 39), (86, 447, 30, 38),
@@ -71,7 +72,7 @@ MOTIONS: tuple[Motion, ...] = (
     Motion('스핀 점프', 12, (
         (1, 292, 30, 27), (36, 292, 29, 27), (70, 292, 29, 27), (105, 292, 29, 27),
         (139, 292, 29, 27), (174, 292, 29, 27),
-    ), speed=300),
+    ), speed=300, jump_height=160),
     Motion('질주', 15, (
         (1, 251, 29, 35), (36, 251, 30, 35), (74, 251, 31, 35), (111, 251, 31, 36),
         (149, 251, 30, 35), (186, 251, 31, 36),
@@ -83,7 +84,7 @@ MOTIONS: tuple[Motion, ...] = (
     Motion('공중 회전', 10, (
         (1, 154, 24, 45), (31, 154, 29, 44), (65, 154, 20, 44), (90, 155, 25, 43),
         (119, 155, 25, 43), (149, 154, 20, 44), (184, 156, 40, 28), (232, 157, 39, 27),
-    ), speed=200),
+    ), speed=200, jump_height=200),
     Motion('정면 달리기', 16, (
         (1, 108, 27, 38), (31, 110, 31, 36), (64, 110, 31, 36), (99, 110, 33, 38),
         (136, 110, 32, 36), (176, 110, 33, 36), (217, 110, 33, 36), (254, 111, 33, 36),
@@ -145,6 +146,17 @@ def repeat_number(state: ViewerState) -> int:
     if state.phase == PAUSE:
         return REPEAT_COUNT
     return min(int(state.elapsed / loop_time(MOTIONS[state.motion_index])) + 1, REPEAT_COUNT)
+
+
+def jump_offset(state: ViewerState) -> float:
+    # 지금 발이 기준선에서 떠 있는 높이(px): 1회 재생할 때마다 포물선을 그리며 한 번 뛰었다가 내려온다.
+    # 그 회차에서 지난 비율을 p라 하면 높이는 점프 높이 × 4p(1 - p)라서 p = 0.5에서 가장 높고, 회차가 끝나면 0이다.
+    # 정지 중에는 기준선에 서 있다.
+    if state.phase == PAUSE:
+        return 0.0
+    motion = MOTIONS[state.motion_index]
+    p = state.elapsed % loop_time(motion) / loop_time(motion)
+    return motion.jump_height * 4 * p * (1 - p)
 
 
 def hud_text(state: ViewerState) -> str:
@@ -227,9 +239,11 @@ def draw_frame(sheet: Image, frame: Frame, x: float, foot_y: float, direction: i
 
 def draw_viewer(sheet: Image, font: Font, state: ViewerState) -> None:
     # 화면을 지우고 지금 상태의 프레임과 상태 글자를 그린 뒤 화면에 내보낸다.
+    # 프레임은 발이 기준선에서 지금 점프 높이만큼 떠 있게 그린다.
     motion = MOTIONS[state.motion_index]
+    foot_y = GROUND_Y + jump_offset(state)
     clear_canvas()
-    draw_frame(sheet, motion.frames[current_frame_index(state)], state.x, GROUND_Y, state.direction)
+    draw_frame(sheet, motion.frames[current_frame_index(state)], state.x, foot_y, state.direction)
     font.draw(HUD_X, HUD_Y, hud_text(state), HUD_COLOR)
     update_canvas()
 

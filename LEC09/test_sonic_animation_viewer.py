@@ -211,6 +211,15 @@ class MainLoopTest(unittest.TestCase):
         sheet = fakes['load_image'].return_value
         sheet.clip_composite_draw.assert_called_once_with(8, 408, 26, 37, 0, 'h', 1052, 224, 104, 148)
 
+    def test_draws_spin_jump_in_the_air(self):
+        # 스핀 점프는 21.25초에 시작한다: 0.3초 뒤(1회째 재생의 60% 지점)에는 x = 690에서
+        # 160 × 4 × 0.6 × 0.4 = 153.6px 떠 있으므로 3번 프레임(116x108)의 중심 y는 150 + 153.6 + 54 = 357.6이다.
+        fakes = run_main([[], [ESC_EVENT]], times=[0.0, 21.55])
+        *frame_and_flip, x, y, draw_w, draw_h = fakes['load_image'].return_value.clip_composite_draw.call_args.args
+        self.assertEqual((*frame_and_flip, draw_w, draw_h), (105, 292, 29, 27, 0, '', 116, 108))
+        self.assertAlmostEqual(x, 690)
+        self.assertAlmostEqual(y, 357.6)
+
     def test_loads_hangul_font_bundled_with_pico2d(self):
         fakes = run_main([[ESC_EVENT]])
         fakes['load_font'].assert_called_once_with(viewer.font_path(), 20)
@@ -558,6 +567,59 @@ class BoundaryTest(unittest.TestCase):
         self.assertEqual(collapse([s.direction for _, s in history]), [viewer.RIGHT, viewer.LEFT])
         turned_at = next(t for t, s in history if s.direction == viewer.LEFT)
         self.assertAlmostEqual(turned_at, 3.51, delta=0.0101)
+
+
+class JumpTest(unittest.TestCase):
+    def test_jump_heights_match_prd_section_6_1(self):
+        table = prd_movement_table()
+        for motion in viewer.MOTIONS:
+            with self.subTest(motion=motion.name):
+                self.assertEqual(motion.jump_height, table[motion.name][3])
+
+    def test_only_spin_jump_and_air_spin_jump(self):
+        jumping = [(motion.name, motion.jump_height) for motion in viewer.MOTIONS if motion.jump_height > 0]
+        self.assertEqual(jumping, [('스핀 점프', 160), ('공중 회전', 200)])
+
+    def test_jump_draws_parabola_in_every_loop(self):
+        # 스핀 점프(1회 0.5초, 높이 160): 회차마다 시작할 때 0, 1/4 지점에서 120, 가운데에서 160, 3/4 지점에서 120
+        for loop in range(5):
+            with self.subTest(loop=loop + 1):
+                for fraction, height in ((0.0, 0), (0.25, 120), (0.5, 160), (0.75, 120)):
+                    state = viewer.ViewerState(motion_index=4, elapsed=(loop + fraction) * 0.5)
+                    self.assertAlmostEqual(viewer.jump_offset(state), height, places=6)
+
+    def test_jumps_five_times_while_playing(self):
+        # 0.01초 간격으로 2.5초 재생하면 꼭대기(160)에 다섯 번 오른다.
+        history = simulate(2.5, viewer.ViewerState(motion_index=4))
+        heights = [viewer.jump_offset(s) for _, s in history]
+        peaks = [h for before, h, after in zip(heights, heights[1:], heights[2:]) if before < h >= after]
+        self.assertEqual(len(peaks), 5)
+        for peak in peaks:
+            self.assertAlmostEqual(peak, 160, delta=0.01)
+
+    def test_lands_when_play_ends_and_stays_on_ground_while_paused(self):
+        # 5회째가 끝나는 순간 높이가 0이 되고, 1초 정지 동안 발은 기준선에 있다.
+        self.assertAlmostEqual(viewer.jump_offset(viewer.ViewerState(motion_index=4, elapsed=2.5 - 1e-9)), 0,
+                               places=5)
+        history = simulate(2.5 + 0.95, viewer.ViewerState(motion_index=4))
+        paused = [s for _, s in history if s.phase == viewer.PAUSE]
+        self.assertGreater(len(paused), 90)
+        self.assertEqual({viewer.jump_offset(s) for s in paused}, {0})
+
+    def test_motions_without_jump_height_stay_on_ground(self):
+        for index, motion in enumerate(viewer.MOTIONS):
+            if motion.jump_height == 0:
+                with self.subTest(motion=motion.name):
+                    history = simulate(viewer.play_time(motion), viewer.ViewerState(motion_index=index))
+                    self.assertEqual({viewer.jump_offset(s) for _, s in history}, {0})
+
+    def test_top_of_highest_jump_stays_below_status_text(self):
+        # 가장 높이 뛰었을 때 그림 위쪽 끝: 스핀 점프 150 + 160 + 27×4 = 418, 공중 회전 150 + 200 + 45×4 = 530
+        # 상태 표시가 있는 화면 위쪽 40px(y 560 이상)과 겹치지 않는다. (PRD 6.4절)
+        tops = {motion.name: viewer.GROUND_Y + motion.jump_height + max(h for *_, h in motion.frames) * 4
+                for motion in viewer.MOTIONS if motion.jump_height > 0}
+        self.assertEqual(tops, {'스핀 점프': 418, '공중 회전': 530})
+        self.assertTrue(all(top <= 600 - 40 for top in tops.values()))
 
 
 class MotionDataTest(unittest.TestCase):
