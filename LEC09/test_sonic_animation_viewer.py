@@ -52,6 +52,14 @@ def prd_motion_table():
             for name, count, fps, loop, play in rows}
 
 
+def prd_movement_table():
+    # PRD.md 6.1절 표에서 {동작 이름: (분류, 속도, 5회 재생 중 이동 거리, 점프 높이)}를 읽는다.
+    rows = re.findall(r'^\| \d+ \| ([^|]+?) \| (중앙|이동) \| (\d+) \| (\d+) \| (\d+) \|$',
+                      read_prd(), re.MULTILINE)
+    return {name: (kind, int(speed), int(distance), int(jump))
+            for name, kind, speed, distance, jump in rows}
+
+
 def simulate(seconds, state=None, dt=0.01):
     # update()를 dt초 간격으로 호출해 seconds초를 흘려보내고, 호출할 때마다 (시각, 새 상태)를 모은다.
     state = state or viewer.ViewerState()
@@ -164,12 +172,13 @@ class MainLoopTest(unittest.TestCase):
 
     def test_draws_first_walk_frame_after_idle_pause(self):
         # 대기는 5.5초 재생 + 1초 정지: 6.45초에는 대기 마지막 프레임, 6.55초에는 걷기 첫 프레임을 그린다.
+        # 걷기는 6.5초에 x = 600에서 출발해 0.05초 동안 150px/초로 움직였으므로 x = 607.5에 그린다.
         fakes = run_main([[], [], [ESC_EVENT]], times=[0.0, 6.45, 6.55])
-        sheet = fakes['load_image'].return_value
-        self.assertEqual(sheet.clip_draw.call_args_list, [
-            mock.call(302, 448, 29, 26, 600, 202, 116, 104),
-            mock.call(8, 408, 26, 37, 600, 224, 104, 148),
-        ])
+        idle_call, walk_call = fakes['load_image'].return_value.clip_draw.call_args_list
+        self.assertEqual(idle_call, mock.call(302, 448, 29, 26, 600, 202, 116, 104))
+        left, bottom, width, height, x, y, draw_w, draw_h = walk_call.args
+        self.assertEqual((left, bottom, width, height, y, draw_w, draw_h), (8, 408, 26, 37, 224, 104, 148))
+        self.assertAlmostEqual(x, 607.5)
 
     def test_draws_frame_for_time_elapsed_since_start(self):
         # 대기(10fps)를 시작 시각 10.0초 기준으로 0.05초, 0.35초, 1.15초 뒤에 그리면 0, 3, 0번 프레임이다.
@@ -180,6 +189,12 @@ class MainLoopTest(unittest.TestCase):
             mock.call(86, 447, 30, 38, 600, 226, 120, 152),
             mock.call(1, 447, 29, 39, 600, 228, 116, 156),
         ])
+
+    def test_draws_walking_sonic_at_moved_x(self):
+        # 걷기는 6.5초에 x = 600에서 시작해 150px/초로 움직인다: 7.5초에는 x = 750에 첫 프레임을 그린다.
+        fakes = run_main([[], [ESC_EVENT]], times=[0.0, 7.5])
+        sheet = fakes['load_image'].return_value
+        sheet.clip_draw.assert_called_once_with(8, 408, 26, 37, 750, 224, 104, 148)
 
     def test_loads_hangul_font_bundled_with_pico2d(self):
         fakes = run_main([[ESC_EVENT]])
@@ -404,6 +419,71 @@ class HudTest(unittest.TestCase):
                 for k in range(2, 6):
                     start = next(t for t, s in history if viewer.repeat_number(s) == k)
                     self.assertAlmostEqual(start, (k - 1) * viewer.loop_time(motion), delta=0.0101)
+
+
+class MovementTest(unittest.TestCase):
+    def test_speeds_match_prd_section_6_1(self):
+        # 이동 거리 = 속도 x 5회 재생 시간
+        table = prd_movement_table()
+        self.assertEqual(len(table), 10)
+        for motion in viewer.MOTIONS:
+            with self.subTest(motion=motion.name):
+                kind, speed, distance, _ = table[motion.name]
+                self.assertEqual(motion.speed, speed)
+                self.assertEqual(kind == '이동', speed > 0)
+                self.assertAlmostEqual(motion.speed * viewer.play_time(motion), distance)
+
+    def test_seven_motions_move_and_three_stay_at_center(self):
+        moving = [motion.name for motion in viewer.MOTIONS if motion.speed > 0]
+        self.assertEqual(moving, ['걷기', '발차기', '스핀 점프', '질주', '최고속 질주', '공중 회전', '정면 달리기'])
+
+    def test_every_motion_starts_at_center_facing_right(self):
+        # 앞 동작이 왼쪽을 보며 x = 900에서 멈췄어도 다음 동작은 x = 600에서 오른쪽을 보고 시작한다.
+        self.assertEqual((viewer.ViewerState().x, viewer.ViewerState().direction), (600, 1))
+        for index in range(len(viewer.MOTIONS)):
+            next_motion = viewer.MOTIONS[(index + 1) % 10]
+            with self.subTest(motion=next_motion.name):
+                pausing = viewer.ViewerState(motion_index=index, phase=viewer.PAUSE, elapsed=0.99,
+                                             x=900.0, direction=-1)
+                state = viewer.update(pausing, 0.02)  # 다음 동작을 0.01초 재생한 상태
+                self.assertEqual(state.direction, 1)
+                self.assertAlmostEqual(state.x, 600 + next_motion.speed * 0.01)
+
+    def test_moves_at_motion_speed_while_playing(self):
+        # 걷기(150px/초)를 0.01초 간격으로 2초 재생하면 x = 600 -> 900
+        history = simulate(2.0, viewer.ViewerState(motion_index=1))
+        self.assertAlmostEqual(history[-1][1].x, 900.0)
+
+    def test_keeps_moving_while_one_frame_is_shown(self):
+        # 걷기(12fps)의 첫 프레임이 보이는 0.08초 동안에도 x는 0.01초마다 1.5px씩 늘어난다.
+        history = simulate(0.08, viewer.ViewerState(motion_index=1))
+        xs = [s.x for _, s in history]
+        self.assertEqual({viewer.current_frame_index(s) for _, s in history}, {0})
+        self.assertTrue(all(after > before for before, after in zip(xs, xs[1:])))
+        self.assertAlmostEqual(xs[-1], 600 + 150 * 0.08)
+
+    def test_center_motions_stay_at_center(self):
+        for index, motion in enumerate(viewer.MOTIONS):
+            if motion.speed == 0:
+                with self.subTest(motion=motion.name):
+                    history = simulate(viewer.play_time(motion) + 0.5, viewer.ViewerState(motion_index=index))
+                    self.assertEqual({(s.x, s.direction) for _, s in history}, {(600, 1)})
+
+    def test_stays_still_during_pause(self):
+        # 발차기(100px/초)는 3초 재생하는 동안 300px 움직여 x = 900에서 멈추고, 정지 중에는 그 자리에 있다.
+        history = simulate(3.0 + 0.95, viewer.ViewerState(motion_index=2))
+        paused = {(s.x, s.direction) for _, s in history if s.phase == viewer.PAUSE}
+        self.assertEqual(len(paused), 1)
+        x, direction = paused.pop()
+        self.assertAlmostEqual(x, 900.0)
+        self.assertEqual(direction, 1)
+
+    def test_long_time_step_moves_only_until_play_ends(self):
+        # 발차기 2.9초째(x = 890)에서 0.5초가 지나면 재생이 끝나는 0.1초 동안만 움직이고 정지한다.
+        state = viewer.update(viewer.ViewerState(motion_index=2, elapsed=2.9, x=890.0), 0.5)
+        self.assertEqual(state.phase, viewer.PAUSE)
+        self.assertAlmostEqual(state.x, 900.0)
+        self.assertAlmostEqual(state.elapsed, 0.4)
 
 
 class MotionDataTest(unittest.TestCase):

@@ -29,20 +29,25 @@ PAUSE_TIME = 1.0  # 5회 재생을 마친 뒤 마지막 프레임에 멈춰 있�
 # 재생 단계: 프레임을 넘기며 재생하는 중(PLAY)이거나, 마지막 프레임에서 멈춰 있는 중(PAUSE)이다.
 PLAY, PAUSE = 'PLAY', 'PAUSE'
 
+# 소닉이 보는 방향: 오른쪽(x가 커지는 쪽)은 1, 왼쪽은 -1이라 이동 속도에 그대로 곱한다.
+RIGHT, LEFT = 1, -1
+
 # 프레임 영역: pico2d 이미지 좌표계(원점이 왼쪽 아래)의 (left, bottom, width, height)
 Frame = tuple[int, int, int, int]
 
 
 @dataclass(frozen=True)
 class Motion:
-    # 동작 하나: 이름, 재생 속도(초당 프레임 수), 재생 순서대로 늘어선 프레임 영역
+    # 동작 하나: 이름, 재생 속도(초당 프레임 수), 재생 순서대로 늘어선 프레임 영역, 가로 이동 속도(px/초)
+    # 이동 속도가 0인 동작은 화면 가운데에 서서 재생한다.
     name: str
     fps: float
     frames: tuple[Frame, ...]
+    speed: float = 0
 
 
 # 재생 순서대로 늘어선 동작 목록
-# 시트를 분석해 얻은 프레임 좌표(PRD.md 5.4절)와 동작별 fps(5.3절)를 그대로 옮겼다.
+# 시트를 분석해 얻은 프레임 좌표(PRD.md 5.4절)와 동작별 fps(5.3절), 이동 속도(6.1절)를 그대로 옮겼다.
 MOTIONS: tuple[Motion, ...] = (
     Motion('대기', 10, (
         (1, 447, 29, 39), (31, 447, 26, 38), (58, 447, 28, 39), (86, 447, 30, 38),
@@ -53,11 +58,11 @@ MOTIONS: tuple[Motion, ...] = (
         (8, 408, 26, 37), (37, 408, 27, 37), (65, 407, 31, 38), (97, 408, 37, 37),
         (135, 410, 32, 35), (170, 408, 32, 38), (206, 408, 26, 38), (238, 408, 24, 37),
         (263, 408, 30, 37), (295, 408, 36, 37), (334, 409, 32, 36), (370, 408, 29, 38),
-    )),
+    ), speed=150),
     Motion('발차기', 10, (
         (1, 361, 33, 40), (39, 362, 35, 39), (89, 362, 35, 38), (130, 362, 34, 42),
         (181, 362, 34, 41), (228, 363, 33, 40),
-    )),
+    ), speed=100),
     Motion('회전 진입', 12, (
         (1, 326, 29, 30), (35, 327, 29, 31), (67, 327, 30, 29), (98, 327, 31, 29),
         (131, 327, 29, 30), (162, 326, 29, 31), (193, 326, 30, 29), (230, 326, 31, 29),
@@ -66,23 +71,23 @@ MOTIONS: tuple[Motion, ...] = (
     Motion('스핀 점프', 12, (
         (1, 292, 30, 27), (36, 292, 29, 27), (70, 292, 29, 27), (105, 292, 29, 27),
         (139, 292, 29, 27), (174, 292, 29, 27),
-    )),
+    ), speed=300),
     Motion('질주', 15, (
         (1, 251, 29, 35), (36, 251, 30, 35), (74, 251, 31, 35), (111, 251, 31, 36),
         (149, 251, 30, 35), (186, 251, 31, 36),
-    )),
+    ), speed=450),
     Motion('최고속 질주', 20, (
         (1, 207, 29, 35), (36, 207, 30, 35), (72, 208, 39, 31), (123, 208, 39, 32),
         (172, 208, 39, 31), (218, 208, 38, 32),
-    )),
+    ), speed=700),
     Motion('공중 회전', 10, (
         (1, 154, 24, 45), (31, 154, 29, 44), (65, 154, 20, 44), (90, 155, 25, 43),
         (119, 155, 25, 43), (149, 154, 20, 44), (184, 156, 40, 28), (232, 157, 39, 27),
-    )),
+    ), speed=200),
     Motion('정면 달리기', 16, (
         (1, 108, 27, 38), (31, 110, 31, 36), (64, 110, 31, 36), (99, 110, 33, 38),
         (136, 110, 32, 36), (176, 110, 33, 36), (217, 110, 33, 36), (254, 111, 33, 36),
-    )),
+    ), speed=250),
     Motion('포즈', 4, (
         (6, 56, 34, 40), (49, 56, 34, 43), (96, 59, 23, 39), (125, 59, 23, 39),
     )),
@@ -91,11 +96,14 @@ MOTIONS: tuple[Motion, ...] = (
 
 @dataclass(frozen=True)
 class ViewerState:
-    # 뷰어의 현재 상태: 몇 번째 동작을, 어느 단계에서, 그 단계가 시작되고 몇 초째 보여 주는지
+    # 뷰어의 현재 상태: 몇 번째 동작을, 어느 단계에서, 그 단계가 시작되고 몇 초째 보여 주는지와
+    # 소닉이 서 있는 가로 위치(x), 보는 방향(direction)
     # 바꿀 수 없는 값이라 시간이 흐르면 update()가 새 상태를 만들어 돌려준다.
     motion_index: int = 0
     phase: str = PLAY
     elapsed: float = 0.0
+    x: float = CENTER_X  # 모든 동작은 화면 가운데에서
+    direction: int = RIGHT  # 오른쪽을 보고 시작한다.
 
 
 def resource_path(file_name: str) -> str:
@@ -167,13 +175,23 @@ def next_phase(state: ViewerState) -> ViewerState:
     return ViewerState(motion_index=(state.motion_index + 1) % len(MOTIONS))
 
 
+def advance(state: ViewerState, dt: float) -> ViewerState:
+    # 지금 단계 안에서 dt초가 지난 상태
+    # 재생 중에는 보는 방향으로 동작의 이동 속도만큼 움직이고, 정지 중에는 그 자리에 머문다.
+    if state.phase == PAUSE:
+        return replace(state, elapsed=state.elapsed + dt)
+    speed = MOTIONS[state.motion_index].speed
+    return replace(state, elapsed=state.elapsed + dt, x=state.x + state.direction * speed * dt)
+
+
 def update(state: ViewerState, dt: float) -> ViewerState:
     # dt초가 지난 뒤의 상태를 새로 만들어 돌려준다.
-    # 그사이 지금 단계가 끝나면 다음 단계로 넘기고, 남은 시간은 다음 단계에서 이어서 센다.
+    # 그사이 지금 단계가 끝나면 끝나는 순간까지만 진행해 다음 단계로 넘기고, 남은 시간은 다음 단계에서 이어서 센다.
     while state.elapsed + dt >= phase_time(state):
-        dt -= phase_time(state) - state.elapsed
-        state = next_phase(state)
-    return replace(state, elapsed=state.elapsed + dt)
+        remaining = phase_time(state) - state.elapsed
+        state = next_phase(advance(state, remaining))
+        dt -= remaining
+    return advance(state, dt)
 
 
 def draw_frame(sheet: Image, frame: Frame, x: float, foot_y: float) -> None:
@@ -189,7 +207,7 @@ def draw_viewer(sheet: Image, font: Font, state: ViewerState) -> None:
     # 화면을 지우고 지금 상태의 프레임과 상태 글자를 그린 뒤 화면에 내보낸다.
     motion = MOTIONS[state.motion_index]
     clear_canvas()
-    draw_frame(sheet, motion.frames[current_frame_index(state)], CENTER_X, GROUND_Y)
+    draw_frame(sheet, motion.frames[current_frame_index(state)], state.x, GROUND_Y)
     font.draw(HUD_X, HUD_Y, hud_text(state), HUD_COLOR)
     update_canvas()
 
