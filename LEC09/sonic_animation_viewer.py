@@ -2,6 +2,7 @@
 # sonic-sprite.png에 있는 소닉의 동작을 원본의 4배 크기로 순서대로 재생한다.
 # 요구사항과 단계별 개발 계획은 PRD.md를 따른다.
 import os
+from dataclasses import dataclass
 
 from pico2d import *
 
@@ -16,7 +17,25 @@ SCALE = 4  # 원본 대비 확대 배율
 
 # 프레임 영역: pico2d 이미지 좌표계(원점이 왼쪽 아래)의 (left, bottom, width, height)
 Frame = tuple[int, int, int, int]
-FIRST_FRAME: Frame = (1, 447, 29, 39)  # 대기 1번 프레임
+
+
+@dataclass(frozen=True)
+class Motion:
+    # 동작 하나: 이름, 재생 속도(초당 프레임 수), 재생 순서대로 늘어선 프레임 영역
+    name: str
+    fps: float
+    frames: tuple[Frame, ...]
+
+
+# 재생 순서대로 늘어선 동작 목록
+# 시트를 분석해 얻은 프레임 좌표(PRD.md 5.4절)와 동작별 fps(5.3절)를 그대로 옮겼다.
+MOTIONS: tuple[Motion, ...] = (
+    Motion('대기', 10, (
+        (1, 447, 29, 39), (31, 447, 26, 38), (58, 447, 28, 39), (86, 447, 30, 38),
+        (118, 447, 30, 38), (150, 447, 30, 38), (182, 447, 29, 38), (211, 448, 29, 38),
+        (240, 448, 29, 38), (270, 448, 24, 32), (302, 448, 29, 26),
+    )),
+)
 
 
 def resource_path(file_name: str) -> str:
@@ -46,7 +65,7 @@ def main() -> None:
         sheet = load_image(resource_path(SPRITE_FILE))
         while handle_events():
             clear_canvas()
-            draw_frame(sheet, FIRST_FRAME, CENTER_X, CENTER_Y)
+            draw_frame(sheet, MOTIONS[0].frames[0], CENTER_X, CENTER_Y)
             update_canvas()
             delay(FRAME_DELAY)
     finally:

@@ -1,12 +1,52 @@
 # sonic_animation_viewer.py 테스트
 # LEC09 폴더에서 `python -m unittest -v`로 실행한다.
 # pico2d 함수는 가짜(mock)로 바꿔 창을 열지 않고 확인한다.
+import dataclasses
 import os
+import re
 import unittest
 from types import SimpleNamespace
 from unittest import mock
 
 import sonic_animation_viewer as viewer
+
+try:
+    from PIL import Image as PILImage
+except ImportError:  # Pillow가 없으면 픽셀 검사 테스트만 건너뛴다.
+    PILImage = None
+
+PRD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'PRD.md')
+SHEET_SIZE = (399, 525)  # sonic-sprite.png 크기 (PRD.md 2절)
+
+# 지금까지 등록한 동작과 프레임 수 (PRD.md 8.2절 3~6단계에서 늘어난다)
+EXPECTED_FRAME_COUNTS = {'대기': 11}
+
+
+def read_prd() -> str:
+    with open(PRD_PATH, encoding='utf-8') as prd:
+        return prd.read()
+
+
+def prd_frames():
+    # PRD.md 5.4절 코드 블록에서 [(동작 이름, [프레임 좌표, ...]), ...]를 순서대로 읽는다.
+    block = read_prd().split('### 5.4 프레임 좌표', 1)[1].split('```')[1]
+    motions = []
+    for line in block.splitlines():
+        header = re.fullmatch(r'\d+ (.+) \((\d+)\)', line.strip())
+        if header:
+            motions.append((header.group(1), [], int(header.group(2))))
+        elif line.strip():
+            boxes = re.findall(r'\((\d+), (\d+), (\d+), (\d+)\)', line)
+            motions[-1][1].extend(tuple(map(int, box)) for box in boxes)
+    for name, frames, count in motions:  # 머리말의 프레임 수와 읽은 좌표 수가 같아야 한다.
+        assert len(frames) == count, (name, len(frames), count)
+    return [(name, frames) for name, frames, _ in motions]
+
+
+def prd_fps():
+    # PRD.md 5.3절 표에서 {동작 이름: (프레임 수, fps)}를 읽는다.
+    rows = re.findall(r'^\| \d+ \| ([^|]+?) \| \d+ \| (\d+) \| (\d+) \|', read_prd(), re.MULTILINE)
+    return {name: (int(count), int(fps)) for name, count, fps in rows}
 
 
 def key_event(key, event_type=None):
@@ -103,6 +143,58 @@ class DrawFrameTest(unittest.TestCase):
         sheet = mock.Mock()
         viewer.draw_frame(sheet, (1, 447, 29, 39), 600, 300)
         sheet.clip_draw.assert_called_once_with(1, 447, 29, 39, 600, 300, 116, 156)
+
+
+class MotionDataTest(unittest.TestCase):
+    def all_frames(self):
+        return [(motion.name, frame) for motion in viewer.MOTIONS for frame in motion.frames]
+
+    def test_registered_motions_and_frame_counts(self):
+        counts = {motion.name: len(motion.frames) for motion in viewer.MOTIONS}
+        self.assertEqual(counts, EXPECTED_FRAME_COUNTS)
+        self.assertEqual(len(self.all_frames()), sum(EXPECTED_FRAME_COUNTS.values()))
+
+    def test_frames_match_prd_section_5_4_in_order(self):
+        registered = [(motion.name, list(motion.frames)) for motion in viewer.MOTIONS]
+        self.assertEqual(registered, prd_frames()[:len(registered)])
+
+    def test_fps_match_prd_section_5_3(self):
+        table = prd_fps()
+        for motion in viewer.MOTIONS:
+            self.assertEqual((len(motion.frames), motion.fps), table[motion.name], motion.name)
+
+    def test_frames_stay_inside_sheet(self):
+        sheet_w, sheet_h = SHEET_SIZE
+        for name, (left, bottom, width, height) in self.all_frames():
+            with self.subTest(motion=name, frame=(left, bottom, width, height)):
+                self.assertTrue(width > 0 and height > 0)
+                self.assertTrue(0 <= left and left + width <= sheet_w)
+                self.assertTrue(0 <= bottom and bottom + height <= sheet_h)
+
+    def test_frames_do_not_overlap(self):
+        frames = self.all_frames()
+        for i, (name1, (l1, b1, w1, h1)) in enumerate(frames):
+            for name2, (l2, b2, w2, h2) in frames[i + 1:]:
+                overlap = l1 < l2 + w2 and l2 < l1 + w1 and b1 < b2 + h2 and b2 < b1 + h1
+                self.assertFalse(overlap, (name1, (l1, b1, w1, h1), name2, (l2, b2, w2, h2)))
+
+    @unittest.skipIf(PILImage is None, 'Pillow가 없어 픽셀 검사를 건너뜀')
+    def test_frame_edges_touch_opaque_pixels(self):
+        # 상자의 네 변 모두에 불투명 픽셀이 닿아야 프레임을 꼭 맞게 자른 것이다.
+        with PILImage.open(viewer.resource_path(viewer.SPRITE_FILE)) as image:
+            sheet = image.convert('RGBA')
+        self.assertEqual(sheet.size, SHEET_SIZE)
+        for name, (left, bottom, width, height) in self.all_frames():
+            top = SHEET_SIZE[1] - bottom - height  # pico2d 좌표(아래 원점) -> 이미지 좌표(위 원점)
+            alpha = sheet.crop((left, top, left + width, top + height)).getchannel('A')
+            with self.subTest(motion=name, frame=(left, bottom, width, height)):
+                self.assertEqual(alpha.getbbox(), (0, 0, width, height))
+
+    def test_motion_data_is_immutable(self):
+        self.assertIsInstance(viewer.MOTIONS, tuple)
+        self.assertIsInstance(viewer.MOTIONS[0].frames, tuple)
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            viewer.MOTIONS[0].fps = 30
 
 
 if __name__ == '__main__':
