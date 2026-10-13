@@ -15,7 +15,18 @@ class Zombie:
     def __init__(self):
         self.x, self.y = 100, 170
         self.frame = 0
-        self.image = load_image()
+        self.image = load_image('zombie.png')
+
+    def update(self):
+        self.frame = (self.frame + 1)%10
+        self.x +=5
+
+    def draw(self):
+        frame_width = self.image.w//10
+        frame_height = self.image.h
+        self.image.clip_draw(self.frame * frame_width, 0, frame_width, frame_height,
+                             self.x, self.y, frame_width//2, frame_height//2)
+    
 
 class Boy:
     def __init__(self):
@@ -42,23 +53,26 @@ def handle_events():
 
 
 def reset_world():
-    global running, grass, team      # team도 global로 선언
+    global running, grass, team, zombie     # team도 global로 선언
     running = True
     grass = Grass()
+    zombie = Zombie()
     team = [Boy() for i in range(11)]
 
 
 def update_world():
-    grass.update()                   # 클래스(Grass)가 아니라 인스턴스(grass)로 호출
+    grass.update()
     for boy in team:
-        boy.update()
+        boy.update()              # 클래스(Grass)가 아니라 인스턴스(grass)로 호출
+    zombie.update()
 
 
 def render_world():
     clear_canvas()
     grass.draw()
     for boy in team:
-        boy.draw()
+        boy.draw()  
+    zombie.draw()
     update_canvas()
 
 
